@@ -114,6 +114,19 @@ export function OpenClawGatewayConfigFields({
 
       {!isCreate && (
         <>
+          <Field
+            label="OpenClaw Agent ID"
+            hint="Agent session key in OpenClaw (e.g. main, cpto). Defaults to Paperclip internal ID if empty."
+          >
+            <DraftInput
+              value={eff("adapterConfig", "agentId", String(config.agentId ?? ""))}
+              onCommit={(v) => mark("adapterConfig", "agentId", v || undefined)}
+              immediate
+              className={inputClass}
+              placeholder="main"
+            />
+          </Field>
+
           <Field label="Paperclip API URL override">
             <DraftInput
               value={
