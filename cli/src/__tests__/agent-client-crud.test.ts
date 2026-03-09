@@ -104,6 +104,31 @@ describe("agent payload builders", () => {
       }),
     ).rejects.toThrow(/Invalid --role/);
   });
+
+  it("rejects malformed budget values for create", async () => {
+    const malformedBudgets = ["123abc", "1.5", "", "   ", "10_000"];
+    for (const budget of malformedBudgets) {
+      await expect(
+        buildAgentCreatePayload({
+          companyId: "company-1",
+          name: "Budget Checker",
+          adapterType: "process",
+          budget,
+        }),
+      ).rejects.toThrow(/Invalid --budget value/);
+    }
+  });
+
+  it("rejects malformed budget values for update", async () => {
+    const malformedBudgets = ["123abc", "1.5", "", "   ", "10_000"];
+    for (const budget of malformedBudgets) {
+      await expect(
+        buildAgentUpdatePayload({
+          budget,
+        }),
+      ).rejects.toThrow(/Invalid --budget value/);
+    }
+  });
 });
 
 describe("executeAgentDelete", () => {
