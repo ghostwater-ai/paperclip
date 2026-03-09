@@ -1,5 +1,6 @@
 import { Command } from "commander";
-import type { Agent } from "@paperclipai/shared";
+import * as p from "@clack/prompts";
+import { AGENT_ADAPTER_TYPES, AGENT_ROLES, type Agent } from "@paperclipai/shared";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -11,10 +12,39 @@ import {
   printOutput,
   resolveCommandContext,
   type BaseClientOptions,
+  type ResolvedClientContext,
 } from "./common.js";
 
 interface AgentListOptions extends BaseClientOptions {
   companyId?: string;
+}
+
+interface AgentCreateOptions extends BaseClientOptions {
+  companyId?: string;
+  name: string;
+  adapterType: string;
+  role?: string;
+  title?: string;
+  reportsTo?: string;
+  adapterConfig?: string;
+  runtimeConfig?: string;
+  budget?: string;
+}
+
+interface AgentUpdateOptions extends BaseClientOptions {
+  name?: string;
+  role?: string;
+  status?: string;
+  adapterType?: string;
+  adapterConfig?: string;
+  runtimeConfig?: string;
+  budget?: string;
+  title?: string;
+  reportsTo?: string;
+}
+
+interface AgentDeleteOptions extends BaseClientOptions {
+  yes?: boolean;
 }
 
 interface AgentLocalCliOptions extends BaseClientOptions {
@@ -43,6 +73,189 @@ const PAPERCLIP_SKILLS_CANDIDATES = [
   path.resolve(__moduleDir, "../../../../../skills"), // dev: cli/src/commands/client -> repo root/skills
   path.resolve(process.cwd(), "skills"),
 ];
+const AGENT_ADAPTER_TYPE_VALUES = [...AGENT_ADAPTER_TYPES] as readonly string[];
+const AGENT_ROLE_VALUES = [...AGENT_ROLES] as readonly string[];
+
+interface AgentMutationPayload {
+  name?: string;
+  role?: string;
+  status?: string;
+  adapterType?: string;
+  adapterConfig?: Record<string, unknown>;
+  runtimeConfig?: Record<string, unknown>;
+  budgetMonthlyCents?: number;
+  title?: string;
+  reportsTo?: string;
+}
+
+interface AgentDeleteExecutionDeps {
+  resolveContext?: (options: BaseClientOptions, opts?: { requireCompany?: boolean }) => ResolvedClientContext;
+  confirmDelete?: (agentId: string) => Promise<boolean>;
+}
+
+interface AgentDeleteSuccessPayload {
+  ok: true;
+  deletedAgentId: string;
+}
+
+interface AgentDeleteCancelledPayload {
+  ok: false;
+  cancelled: true;
+  deletedAgentId: string;
+}
+
+interface AgentDeleteExecutionResult {
+  deleted: boolean;
+  payload: AgentDeleteSuccessPayload | AgentDeleteCancelledPayload;
+  json: boolean;
+}
+
+function omitUndefined<T extends Record<string, unknown>>(input: T): T {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as T;
+}
+
+function parseAgentBudget(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.trim();
+  if (!/^\d+$/.test(normalized)) {
+    throw new Error(`Invalid --budget value '${value}'. Expected a non-negative integer.`);
+  }
+  const parsed = Number(normalized);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`Invalid --budget value '${value}'. Expected a non-negative integer.`);
+  }
+  return parsed;
+}
+
+function parseEnumFlag(value: string | undefined, values: readonly string[], flagName: string): string | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.trim();
+  if (!values.includes(normalized)) {
+    throw new Error(`Invalid ${flagName} '${value}'. Allowed: ${values.join(", ")}`);
+  }
+  return normalized;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export async function promptAgentDeleteConfirmation(agentId: string): Promise<boolean> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error("Confirmation requires an interactive terminal. Re-run with --yes to skip the prompt.");
+  }
+
+  const answer = await p.confirm({
+    message: `Delete agent '${agentId}'? This action cannot be undone.`,
+    initialValue: false,
+  });
+
+  if (p.isCancel(answer)) {
+    return false;
+  }
+
+  return answer;
+}
+
+export async function executeAgentDelete(
+  agentId: string,
+  opts: AgentDeleteOptions,
+  deps: AgentDeleteExecutionDeps = {},
+): Promise<AgentDeleteExecutionResult> {
+  const resolveContext = deps.resolveContext ?? resolveCommandContext;
+  const confirmDelete = deps.confirmDelete ?? promptAgentDeleteConfirmation;
+  const ctx = resolveContext(opts);
+
+  let shouldDelete = Boolean(opts.yes);
+  if (!shouldDelete) {
+    shouldDelete = await confirmDelete(agentId);
+  }
+
+  if (!shouldDelete) {
+    return {
+      deleted: false,
+      payload: {
+        ok: false,
+        cancelled: true,
+        deletedAgentId: agentId,
+      },
+      json: ctx.json,
+    };
+  }
+
+  await ctx.api.delete(`/api/agents/${agentId}`);
+
+  return {
+    deleted: true,
+    payload: {
+      ok: true,
+      deletedAgentId: agentId,
+    },
+    json: ctx.json,
+  };
+}
+
+export async function parseJsonConfigFlag(
+  rawValue: string | undefined,
+  flagName: "--adapter-config" | "--runtime-config",
+): Promise<Record<string, unknown> | undefined> {
+  if (rawValue === undefined) return undefined;
+
+  const trimmed = rawValue.trim();
+  const fromPath = trimmed.startsWith("@");
+  const sourceHint = fromPath ? trimmed.slice(1).trim() : undefined;
+  if (fromPath && !sourceHint) {
+    throw new Error(`Invalid ${flagName} value: missing file path after '@'.`);
+  }
+  const filePath = sourceHint as string | undefined;
+  const source = fromPath
+    ? await fs.readFile(filePath!, { encoding: "utf8" }).catch((error) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to read ${flagName} file '${filePath}': ${reason}`);
+      })
+    : rawValue;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid JSON for ${flagName}: ${reason}`);
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error(`Invalid JSON for ${flagName}: expected a JSON object.`);
+  }
+
+  return parsed;
+}
+
+export async function buildAgentCreatePayload(opts: AgentCreateOptions): Promise<Required<Pick<AgentMutationPayload, "name" | "adapterType">> & AgentMutationPayload> {
+  return omitUndefined({
+    name: opts.name,
+    adapterType: parseEnumFlag(opts.adapterType, AGENT_ADAPTER_TYPE_VALUES, "--adapter-type")!,
+    role: parseEnumFlag(opts.role, AGENT_ROLE_VALUES, "--role"),
+    title: opts.title,
+    reportsTo: opts.reportsTo,
+    adapterConfig: await parseJsonConfigFlag(opts.adapterConfig, "--adapter-config"),
+    runtimeConfig: await parseJsonConfigFlag(opts.runtimeConfig, "--runtime-config"),
+    budgetMonthlyCents: parseAgentBudget(opts.budget),
+  });
+}
+
+export async function buildAgentUpdatePayload(opts: AgentUpdateOptions): Promise<AgentMutationPayload> {
+  return omitUndefined({
+    name: opts.name,
+    role: parseEnumFlag(opts.role, AGENT_ROLE_VALUES, "--role"),
+    status: opts.status,
+    adapterType: parseEnumFlag(opts.adapterType, AGENT_ADAPTER_TYPE_VALUES, "--adapter-type"),
+    adapterConfig: await parseJsonConfigFlag(opts.adapterConfig, "--adapter-config"),
+    runtimeConfig: await parseJsonConfigFlag(opts.runtimeConfig, "--runtime-config"),
+    budgetMonthlyCents: parseAgentBudget(opts.budget),
+    title: opts.title,
+    reportsTo: opts.reportsTo,
+  });
+}
 
 function codexSkillsHome(): string {
   const fromEnv = process.env.CODEX_HOME?.trim();
@@ -120,6 +333,131 @@ function buildAgentEnvExports(input: {
 
 export function registerAgentCommands(program: Command): void {
   const agent = program.command("agent").description("Agent operations");
+
+  addCommonClientOptions(
+    agent
+      .command("create")
+      .description("Create an agent")
+      .requiredOption("-C, --company-id <id>", "Company ID")
+      .requiredOption("--name <name>", "Agent name")
+      .requiredOption(
+        "--adapter-type <type>",
+        `Adapter type (${AGENT_ADAPTER_TYPE_VALUES.join(", ")})`,
+      )
+      .option("--role <role>", `Agent role (${AGENT_ROLE_VALUES.join(", ")})`)
+      .option("--title <title>", "Agent title")
+      .option("--reports-to <agentId>", "Manager agent ID")
+      .option("--adapter-config <jsonOrFile>", "Adapter config JSON or @path/to/file.json")
+      .option("--runtime-config <jsonOrFile>", "Runtime config JSON or @path/to/file.json")
+      .option("--budget <cents>", "Monthly budget in cents (integer)")
+      .action(async (opts: AgentCreateOptions) => {
+        try {
+          const ctx = resolveCommandContext(opts, { requireCompany: true });
+          const payload = await buildAgentCreatePayload(opts);
+          const created = await ctx.api.post<Agent>(`/api/companies/${ctx.companyId}/agents`, payload);
+          if (!created) {
+            throw new Error("Create agent request returned no data");
+          }
+
+          if (ctx.json) {
+            printOutput(created, { json: true });
+            return;
+          }
+
+          console.log(
+            formatInlineRecord({
+              id: created.id,
+              name: created.name,
+              role: created.role,
+              status: created.status,
+              title: created.title,
+              reportsTo: created.reportsTo,
+              adapterType: created.adapterType,
+              budgetMonthlyCents: created.budgetMonthlyCents,
+            }),
+          );
+        } catch (err) {
+          handleCommandError(err);
+        }
+      }),
+    { includeCompany: false },
+  );
+
+  addCommonClientOptions(
+    agent
+      .command("update")
+      .description("Update an agent")
+      .argument("<agentId>", "Agent ID")
+      .option("--name <name>", "Agent name")
+      .option("--role <role>", `Agent role (${AGENT_ROLE_VALUES.join(", ")})`)
+      .option("--status <status>", "Agent status")
+      .option(
+        "--adapter-type <type>",
+        `Adapter type (${AGENT_ADAPTER_TYPE_VALUES.join(", ")})`,
+      )
+      .option("--adapter-config <jsonOrFile>", "Adapter config JSON or @path/to/file.json")
+      .option("--runtime-config <jsonOrFile>", "Runtime config JSON or @path/to/file.json")
+      .option("--budget <cents>", "Monthly budget in cents (integer)")
+      .option("--title <title>", "Agent title")
+      .option("--reports-to <agentId>", "Manager agent ID")
+      .action(async (agentId: string, opts: AgentUpdateOptions) => {
+        try {
+          const ctx = resolveCommandContext(opts);
+          const payload = await buildAgentUpdatePayload(opts);
+          const updated = await ctx.api.patch<Agent>(`/api/agents/${agentId}`, payload);
+          if (!updated) {
+            throw new Error("Update agent request returned no data");
+          }
+
+          if (ctx.json) {
+            printOutput(updated, { json: true });
+            return;
+          }
+
+          console.log(
+            formatInlineRecord({
+              id: updated.id,
+              name: updated.name,
+              role: updated.role,
+              status: updated.status,
+              title: updated.title,
+              reportsTo: updated.reportsTo,
+              adapterType: updated.adapterType,
+              budgetMonthlyCents: updated.budgetMonthlyCents,
+            }),
+          );
+        } catch (err) {
+          handleCommandError(err);
+        }
+      }),
+  );
+
+  addCommonClientOptions(
+    agent
+      .command("delete")
+      .description("Delete an agent (destructive)")
+      .argument("<agentId>", "Agent ID")
+      .option("-y, --yes", "Skip confirmation prompt", false)
+      .action(async (agentId: string, opts: AgentDeleteOptions) => {
+        try {
+          const result = await executeAgentDelete(agentId, opts);
+
+          if (result.json) {
+            printOutput(result.payload, { json: true });
+            return;
+          }
+
+          if (!result.deleted) {
+            console.log(`Cancelled deletion for agent ${agentId}.`);
+            return;
+          }
+
+          console.log(`Deleted agent ${agentId}.`);
+        } catch (err) {
+          handleCommandError(err);
+        }
+      }),
+  );
 
   addCommonClientOptions(
     agent
