@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildAgentCreatePayload,
   buildAgentUpdatePayload,
+  executeAgentDelete,
   parseJsonConfigFlag,
 } from "../commands/client/agent.js";
 
@@ -102,5 +103,100 @@ describe("agent payload builders", () => {
         role: "intern",
       }),
     ).rejects.toThrow(/Invalid --role/);
+  });
+});
+
+describe("executeAgentDelete", () => {
+  it("does not call delete when confirmation is declined", async () => {
+    const deleteSpy = vi.fn().mockResolvedValue(null);
+    const confirmDelete = vi.fn().mockResolvedValue(false);
+
+    const result = await executeAgentDelete(
+      "agent-123",
+      { apiBase: "http://localhost:3100" },
+      {
+        resolveContext: () => ({
+          api: { delete: deleteSpy } as any,
+          companyId: undefined,
+          profileName: "default",
+          profile: {} as any,
+          json: false,
+        }),
+        confirmDelete,
+      },
+    );
+
+    expect(confirmDelete).toHaveBeenCalledWith("agent-123");
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      deleted: false,
+      payload: {
+        ok: false,
+        cancelled: true,
+        deletedAgentId: "agent-123",
+      },
+      json: false,
+    });
+  });
+
+  it("calls delete when confirmation is accepted", async () => {
+    const deleteSpy = vi.fn().mockResolvedValue(null);
+    const confirmDelete = vi.fn().mockResolvedValue(true);
+
+    const result = await executeAgentDelete(
+      "agent-456",
+      { apiBase: "http://localhost:3100" },
+      {
+        resolveContext: () => ({
+          api: { delete: deleteSpy } as any,
+          companyId: undefined,
+          profileName: "default",
+          profile: {} as any,
+          json: true,
+        }),
+        confirmDelete,
+      },
+    );
+
+    expect(confirmDelete).toHaveBeenCalledWith("agent-456");
+    expect(deleteSpy).toHaveBeenCalledWith("/api/agents/agent-456");
+    expect(result).toEqual({
+      deleted: true,
+      payload: {
+        ok: true,
+        deletedAgentId: "agent-456",
+      },
+      json: true,
+    });
+  });
+
+  it("skips prompt and calls delete when --yes is passed", async () => {
+    const deleteSpy = vi.fn().mockResolvedValue(null);
+    const confirmDelete = vi.fn().mockResolvedValue(false);
+
+    const result = await executeAgentDelete(
+      "agent-789",
+      {
+        apiBase: "http://localhost:3100",
+        yes: true,
+      },
+      {
+        resolveContext: () => ({
+          api: { delete: deleteSpy } as any,
+          companyId: undefined,
+          profileName: "default",
+          profile: {} as any,
+          json: false,
+        }),
+        confirmDelete,
+      },
+    );
+
+    expect(confirmDelete).not.toHaveBeenCalled();
+    expect(deleteSpy).toHaveBeenCalledWith("/api/agents/agent-789");
+    expect(result.payload).toEqual({
+      ok: true,
+      deletedAgentId: "agent-789",
+    });
   });
 });
