@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import * as p from "@clack/prompts";
 import { AGENT_ADAPTER_TYPES, AGENT_ROLES, type Agent } from "@paperclipai/shared";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -11,6 +12,7 @@ import {
   printOutput,
   resolveCommandContext,
   type BaseClientOptions,
+  type ResolvedClientContext,
 } from "./common.js";
 
 interface AgentListOptions extends BaseClientOptions {
@@ -39,6 +41,10 @@ interface AgentUpdateOptions extends BaseClientOptions {
   budget?: string;
   title?: string;
   reportsTo?: string;
+}
+
+interface AgentDeleteOptions extends BaseClientOptions {
+  yes?: boolean;
 }
 
 interface AgentLocalCliOptions extends BaseClientOptions {
@@ -82,6 +88,28 @@ interface AgentMutationPayload {
   reportsTo?: string;
 }
 
+interface AgentDeleteExecutionDeps {
+  resolveContext?: (options: BaseClientOptions, opts?: { requireCompany?: boolean }) => ResolvedClientContext;
+  confirmDelete?: (agentId: string) => Promise<boolean>;
+}
+
+interface AgentDeleteSuccessPayload {
+  ok: true;
+  deletedAgentId: string;
+}
+
+interface AgentDeleteCancelledPayload {
+  ok: false;
+  cancelled: true;
+  deletedAgentId: string;
+}
+
+interface AgentDeleteExecutionResult {
+  deleted: boolean;
+  payload: AgentDeleteSuccessPayload | AgentDeleteCancelledPayload;
+  json: boolean;
+}
+
 function omitUndefined<T extends Record<string, unknown>>(input: T): T {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as T;
 }
@@ -106,6 +134,61 @@ function parseEnumFlag(value: string | undefined, values: readonly string[], fla
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export async function promptAgentDeleteConfirmation(agentId: string): Promise<boolean> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error("Confirmation requires an interactive terminal. Re-run with --yes to skip the prompt.");
+  }
+
+  const answer = await p.confirm({
+    message: `Delete agent '${agentId}'? This action cannot be undone.`,
+    initialValue: false,
+  });
+
+  if (p.isCancel(answer)) {
+    return false;
+  }
+
+  return answer;
+}
+
+export async function executeAgentDelete(
+  agentId: string,
+  opts: AgentDeleteOptions,
+  deps: AgentDeleteExecutionDeps = {},
+): Promise<AgentDeleteExecutionResult> {
+  const resolveContext = deps.resolveContext ?? resolveCommandContext;
+  const confirmDelete = deps.confirmDelete ?? promptAgentDeleteConfirmation;
+  const ctx = resolveContext(opts);
+
+  let shouldDelete = Boolean(opts.yes);
+  if (!shouldDelete) {
+    shouldDelete = await confirmDelete(agentId);
+  }
+
+  if (!shouldDelete) {
+    return {
+      deleted: false,
+      payload: {
+        ok: false,
+        cancelled: true,
+        deletedAgentId: agentId,
+      },
+      json: ctx.json,
+    };
+  }
+
+  await ctx.api.delete(`/api/agents/${agentId}`);
+
+  return {
+    deleted: true,
+    payload: {
+      ok: true,
+      deletedAgentId: agentId,
+    },
+    json: ctx.json,
+  };
 }
 
 export async function parseJsonConfigFlag(
@@ -339,6 +422,33 @@ export function registerAgentCommands(program: Command): void {
               budgetMonthlyCents: updated.budgetMonthlyCents,
             }),
           );
+        } catch (err) {
+          handleCommandError(err);
+        }
+      }),
+  );
+
+  addCommonClientOptions(
+    agent
+      .command("delete")
+      .description("Delete an agent (destructive)")
+      .argument("<agentId>", "Agent ID")
+      .option("-y, --yes", "Skip confirmation prompt", false)
+      .action(async (agentId: string, opts: AgentDeleteOptions) => {
+        try {
+          const result = await executeAgentDelete(agentId, opts);
+
+          if (result.json) {
+            printOutput(result.payload, { json: true });
+            return;
+          }
+
+          if (!result.deleted) {
+            console.log(`Cancelled deletion for agent ${agentId}.`);
+            return;
+          }
+
+          console.log(`Deleted agent ${agentId}.`);
         } catch (err) {
           handleCommandError(err);
         }
