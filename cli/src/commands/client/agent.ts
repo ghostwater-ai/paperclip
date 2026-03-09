@@ -116,8 +116,12 @@ function omitUndefined<T extends Record<string, unknown>>(input: T): T {
 
 function parseAgentBudget(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed < 0) {
+  const normalized = value.trim();
+  if (!/^\d+$/.test(normalized)) {
+    throw new Error(`Invalid --budget value '${value}'. Expected a non-negative integer.`);
+  }
+  const parsed = Number(normalized);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
     throw new Error(`Invalid --budget value '${value}'. Expected a non-negative integer.`);
   }
   return parsed;
