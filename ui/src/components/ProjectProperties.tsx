@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Project } from "@paperclipai/shared";
@@ -84,6 +84,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
   const [workspaceCwd, setWorkspaceCwd] = useState("");
   const [workspaceRepoUrl, setWorkspaceRepoUrl] = useState("");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [sessionKeyDraft, setSessionKeyDraft] = useState(project.sessionKey ?? "");
 
   const { data: allGoals } = useQuery({
     queryKey: queryKeys.goals.list(selectedCompanyId!),
@@ -106,6 +107,10 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
 
   const availableGoals = (allGoals ?? []).filter((g) => !linkedGoalIds.includes(g.id));
   const workspaces = project.workspaces ?? [];
+
+  useEffect(() => {
+    setSessionKeyDraft(project.sessionKey ?? "");
+  }, [project.id, project.sessionKey]);
 
   const invalidateProject = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(project.id) });
@@ -253,6 +258,13 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
     removeWorkspace.mutate(workspace.id);
   };
 
+  const saveSessionKey = () => {
+    if (!onUpdate) return;
+    const nextValue = sessionKeyDraft.trim() ? sessionKeyDraft.trim() : null;
+    if (nextValue === (project.sessionKey ?? null)) return;
+    onUpdate({ sessionKey: nextValue });
+  };
+
   return (
     <div className="space-y-4">
       <div className="space-y-1">
@@ -341,6 +353,26 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
             <span className="text-sm">{formatDate(project.targetDate)}</span>
           </PropertyRow>
         )}
+        <PropertyRow label="Session Key">
+          {onUpdate ? (
+            <input
+              className="h-7 w-56 rounded border border-border bg-transparent px-2 text-xs outline-none"
+              value={sessionKeyDraft}
+              onChange={(e) => setSessionKeyDraft(e.target.value)}
+              onBlur={saveSessionKey}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  saveSessionKey();
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              placeholder="e.g. paperclip:my-project"
+            />
+          ) : (
+            <span className="text-sm">{project.sessionKey ?? "None"}</span>
+          )}
+        </PropertyRow>
       </div>
 
       <Separator />

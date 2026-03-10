@@ -441,6 +441,74 @@ describe("openclaw gateway adapter execute", () => {
     expect(result.errorCode).toBe("openclaw_gateway_url_missing");
   });
 
+  it("prefers project session key over strategy-derived session key", async () => {
+    const gateway = await createMockGatewayServer();
+
+    try {
+      const result = await execute(
+        buildContext(
+          {
+            url: gateway.url,
+            headers: {
+              "x-openclaw-token": "gateway-token",
+            },
+            sessionKeyStrategy: "run",
+          },
+          {
+            context: {
+              taskId: "task-123",
+              issueId: "issue-123",
+              wakeReason: "issue_assigned",
+              issueIds: ["issue-123"],
+              projectSessionKey: "paperclip:project:alpha",
+            },
+          },
+        ),
+      );
+
+      expect(result.exitCode).toBe(0);
+      const payload = gateway.getAgentPayload();
+      expect(payload).toBeTruthy();
+      expect(payload?.sessionKey).toBe("paperclip:project:alpha");
+    } finally {
+      await gateway.close();
+    }
+  });
+
+  it("falls back to strategy-derived session key when project session key is null", async () => {
+    const gateway = await createMockGatewayServer();
+
+    try {
+      const result = await execute(
+        buildContext(
+          {
+            url: gateway.url,
+            headers: {
+              "x-openclaw-token": "gateway-token",
+            },
+            sessionKeyStrategy: "run",
+          },
+          {
+            context: {
+              taskId: "task-123",
+              issueId: "issue-123",
+              wakeReason: "issue_assigned",
+              issueIds: ["issue-123"],
+              projectSessionKey: null,
+            },
+          },
+        ),
+      );
+
+      expect(result.exitCode).toBe(0);
+      const payload = gateway.getAgentPayload();
+      expect(payload).toBeTruthy();
+      expect(payload?.sessionKey).toBe("paperclip:run:run-123");
+    } finally {
+      await gateway.close();
+    }
+  });
+
   it("auto-approves pairing once and retries the run", async () => {
     const gateway = await createMockGatewayServerWithPairing();
     const logs: string[] = [];

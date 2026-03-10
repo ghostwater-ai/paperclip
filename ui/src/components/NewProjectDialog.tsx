@@ -53,6 +53,7 @@ export function NewProjectDialog() {
   const [status, setStatus] = useState("planned");
   const [goalIds, setGoalIds] = useState<string[]>([]);
   const [targetDate, setTargetDate] = useState("");
+  const [sessionKey, setSessionKey] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [workspaceSetup, setWorkspaceSetup] = useState<WorkspaceSetup>("none");
   const [workspaceLocalPath, setWorkspaceLocalPath] = useState("");
@@ -87,6 +88,7 @@ export function NewProjectDialog() {
     setStatus("planned");
     setGoalIds([]);
     setTargetDate("");
+    setSessionKey("");
     setExpanded(false);
     setWorkspaceSetup("none");
     setWorkspaceLocalPath("");
@@ -156,6 +158,7 @@ export function NewProjectDialog() {
         color: PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)],
         ...(goalIds.length > 0 ? { goalIds } : {}),
         ...(targetDate ? { targetDate } : {}),
+        ...(sessionKey.trim() ? { sessionKey: sessionKey.trim() } : {}),
       });
 
       const workspacePayloads: Array<Record<string, unknown>> = [];
@@ -454,6 +457,16 @@ export function NewProjectDialog() {
               placeholder="Target date"
             />
           </div>
+        </div>
+
+        <div className="px-4 pb-3 border-t border-border">
+          <label className="mb-1 block text-xs text-muted-foreground">Session Key</label>
+          <input
+            className="w-full rounded border border-border bg-transparent px-2 py-1.5 text-xs outline-none"
+            value={sessionKey}
+            onChange={(e) => setSessionKey(e.target.value)}
+            placeholder="e.g. paperclip:my-project"
+          />
         </div>
 
         {/* Footer */}
