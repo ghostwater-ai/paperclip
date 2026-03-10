@@ -11,6 +11,7 @@ import {
   heartbeatRuns,
   costEvents,
   issues,
+  projects,
   projectWorkspaces,
 } from "@paperclipai/db";
 import { conflict, notFound } from "../errors.js";
@@ -344,6 +345,32 @@ function getAdapterSessionCodec(adapterType: string) {
 function normalizeSessionParams(params: Record<string, unknown> | null | undefined) {
   if (!params) return null;
   return Object.keys(params).length > 0 ? params : null;
+}
+
+export async function enrichContextWithProjectSessionKey(input: {
+  db: Db;
+  companyId: string;
+  context: Record<string, unknown>;
+}) {
+  const projectId = readNonEmptyString(input.context.projectId);
+  if (!projectId) {
+    delete input.context.projectSessionKey;
+    return null;
+  }
+
+  const projectSessionKey = await input.db
+    .select({ sessionKey: projects.sessionKey })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.companyId, input.companyId)))
+    .then((rows) => readNonEmptyString(rows[0]?.sessionKey));
+
+  if (projectSessionKey) {
+    input.context.projectSessionKey = projectSessionKey;
+    return projectSessionKey;
+  }
+
+  delete input.context.projectSessionKey;
+  return null;
 }
 
 function resolveNextSessionState(input: {
@@ -1128,6 +1155,11 @@ export function heartbeatService(db: Db) {
     if (resolvedWorkspace.projectId && !readNonEmptyString(context.projectId)) {
       context.projectId = resolvedWorkspace.projectId;
     }
+    await enrichContextWithProjectSessionKey({
+      db,
+      companyId: agent.companyId,
+      context,
+    });
     const runtimeSessionFallback = taskKey || resetTaskSession ? null : runtime.sessionId;
     const previousSessionDisplayId = truncateDisplayId(
       taskSessionForRun?.sessionDisplayId ??
