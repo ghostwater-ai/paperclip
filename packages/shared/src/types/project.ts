@@ -32,6 +32,7 @@ export interface Project {
   status: ProjectStatus;
   leadAgentId: string | null;
   targetDate: string | null;
+  sessionKey: string | null;
   color: string | null;
   workspaces: ProjectWorkspace[];
   primaryWorkspace: ProjectWorkspace | null;
