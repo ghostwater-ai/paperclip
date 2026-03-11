@@ -276,6 +276,10 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
   const saveSessionKeyRouting = (rules: RoutingRule[]) => {
     setSessionKeyRoutingDraft(rules);
     if (!onUpdate) return;
+    const hasIncompleteRule = rules.some((rule) => !rule.pattern.trim() || !rule.sessionKey.trim());
+    if (hasIncompleteRule) {
+      return;
+    }
 
     const nextValue = rules.length > 0 ? rules : null;
     const currentValue = parseRoutingRules(project.sessionKeyRouting);
