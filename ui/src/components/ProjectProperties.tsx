@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ExternalLink, Github, Plus, Trash2, X } from "lucide-react";
 import { ChoosePathButton } from "./PathInstructionsModal";
+import { RoutingRulesEditor, parseRoutingRules, type RoutingRule } from "./RoutingRulesEditor";
 
 const PROJECT_STATUSES = [
   { value: "backlog", label: "Backlog" },
@@ -85,6 +86,9 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
   const [workspaceRepoUrl, setWorkspaceRepoUrl] = useState("");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [sessionKeyDraft, setSessionKeyDraft] = useState(project.sessionKey ?? "");
+  const [sessionKeyRoutingDraft, setSessionKeyRoutingDraft] = useState<RoutingRule[]>(
+    parseRoutingRules(project.sessionKeyRouting),
+  );
 
   const { data: allGoals } = useQuery({
     queryKey: queryKeys.goals.list(selectedCompanyId!),
@@ -111,6 +115,10 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
   useEffect(() => {
     setSessionKeyDraft(project.sessionKey ?? "");
   }, [project.id, project.sessionKey]);
+
+  useEffect(() => {
+    setSessionKeyRoutingDraft(parseRoutingRules(project.sessionKeyRouting));
+  }, [project.id, project.sessionKeyRouting]);
 
   const invalidateProject = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(project.id) });
@@ -265,6 +273,20 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
     onUpdate({ sessionKey: nextValue });
   };
 
+  const saveSessionKeyRouting = (rules: RoutingRule[]) => {
+    setSessionKeyRoutingDraft(rules);
+    if (!onUpdate) return;
+
+    const nextValue = rules.length > 0 ? rules : null;
+    const currentValue = parseRoutingRules(project.sessionKeyRouting);
+    const currentNormalized = currentValue.length > 0 ? currentValue : null;
+    if (JSON.stringify(nextValue) === JSON.stringify(currentNormalized)) {
+      return;
+    }
+
+    onUpdate({ sessionKeyRouting: nextValue });
+  };
+
   return (
     <div className="space-y-4">
       <div className="space-y-1">
@@ -373,6 +395,13 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
             <span className="text-sm">{project.sessionKey ?? "None"}</span>
           )}
         </PropertyRow>
+        <div className="py-1.5 space-y-1.5">
+          <span className="text-xs text-muted-foreground">Session Key Routing</span>
+          <RoutingRulesEditor
+            rules={sessionKeyRoutingDraft}
+            onChange={saveSessionKeyRouting}
+          />
+        </div>
       </div>
 
       <Separator />
