@@ -188,6 +188,7 @@ export function interpolateTemplate(
 }
 
 export function resolveSessionKeyFromRouting(input: {
+  projectRoutingRules?: SessionKeyRoutingRule[] | null;
   routingRules: SessionKeyRoutingRule[];
   wakeSource: string | null;
   wakeReason: string | null;
@@ -215,7 +216,10 @@ export function resolveSessionKeyFromRouting(input: {
     wakeReason: nonEmpty(input.wakeReason),
   };
 
-  for (const rule of input.routingRules) {
+  const projectRoutingRules = Array.isArray(input.projectRoutingRules) ? input.projectRoutingRules : [];
+  const orderedRules = [...projectRoutingRules, ...input.routingRules];
+
+  for (const rule of orderedRules) {
     if (!matchPattern(sourceAndReason, rule.pattern)) continue;
     const resolved = interpolateTemplate(rule.sessionKey, variables);
     if (resolved) return resolved;
@@ -1012,8 +1016,10 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const sessionKeyStrategy = normalizeSessionKeyStrategy(ctx.config.sessionKeyStrategy);
   const configuredSessionKey = nonEmpty(ctx.config.sessionKey);
   const projectSessionKey = nonEmpty(ctx.context.projectSessionKey);
+  const projectRoutingRules = parseSessionKeyRouting(ctx.context.projectSessionKeyRouting);
   const routingRules = parseSessionKeyRouting(ctx.config.sessionKeyRouting);
   const sessionKey = resolveSessionKeyFromRouting({
+    projectRoutingRules,
     routingRules,
     wakeSource: nonEmpty(ctx.context.wakeSource),
     wakeReason: wakePayload.wakeReason,

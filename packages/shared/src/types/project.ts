@@ -1,5 +1,10 @@
 import type { ProjectStatus } from "../constants.js";
 
+export interface SessionKeyRoutingRule {
+  pattern: string;
+  sessionKey: string;
+}
+
 export interface ProjectGoalRef {
   id: string;
   title: string;
@@ -33,6 +38,7 @@ export interface Project {
   leadAgentId: string | null;
   targetDate: string | null;
   sessionKey: string | null;
+  sessionKeyRouting: SessionKeyRoutingRule[] | null;
   color: string | null;
   workspaces: ProjectWorkspace[];
   primaryWorkspace: ProjectWorkspace | null;

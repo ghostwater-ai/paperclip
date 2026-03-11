@@ -732,4 +732,60 @@ describe("openclaw gateway session key routing helpers", () => {
     });
     expect(fromFallback).toBe("paperclip:run:run-1");
   });
+
+  it("prioritizes project routing rules before agent routing rules", () => {
+    const resolved = resolveSessionKeyFromRouting({
+      projectRoutingRules: [{ pattern: "assignment:*", sessionKey: "project:{{projectId}}" }],
+      routingRules: [{ pattern: "assignment:*", sessionKey: "agent:{{agentId}}" }],
+      wakeSource: "assignment",
+      wakeReason: "issue_assigned",
+      runId: "run-1",
+      issueId: "issue-1",
+      projectId: "project-1",
+      projectSessionKey: "paperclip:project:alpha",
+      agentId: "agent-1",
+      fallback: {
+        strategy: "run",
+        configuredSessionKey: null,
+      },
+    });
+
+    expect(resolved).toBe("project:project-1");
+  });
+
+  it("falls through to agent routing rules when project routing rules are null or empty", () => {
+    const fromEmptyProjectRules = resolveSessionKeyFromRouting({
+      projectRoutingRules: [],
+      routingRules: [{ pattern: "assignment:*", sessionKey: "agent:{{agentId}}" }],
+      wakeSource: "assignment",
+      wakeReason: "issue_assigned",
+      runId: "run-1",
+      issueId: "issue-1",
+      projectId: "project-1",
+      projectSessionKey: "paperclip:project:alpha",
+      agentId: "agent-1",
+      fallback: {
+        strategy: "fixed",
+        configuredSessionKey: "paperclip",
+      },
+    });
+    expect(fromEmptyProjectRules).toBe("agent:agent-1");
+
+    const fromNullProjectRules = resolveSessionKeyFromRouting({
+      projectRoutingRules: null,
+      routingRules: [{ pattern: "assignment:*", sessionKey: "agent:{{agentId}}" }],
+      wakeSource: "assignment",
+      wakeReason: "issue_assigned",
+      runId: "run-1",
+      issueId: "issue-1",
+      projectId: "project-1",
+      projectSessionKey: "paperclip:project:alpha",
+      agentId: "agent-1",
+      fallback: {
+        strategy: "fixed",
+        configuredSessionKey: "paperclip",
+      },
+    });
+    expect(fromNullProjectRules).toBe("agent:agent-1");
+  });
 });

@@ -21,6 +21,38 @@ describe("project schema sessionKey contract", () => {
     expect(omitted.sessionKey).toBeUndefined();
   });
 
+  it("accepts array, null, and omitted sessionKeyRouting for create/update", () => {
+    const rules = [{ pattern: "assignment:*", sessionKey: "{{projectSessionKey}}" }];
+
+    const createWithRules = createProjectSchema.parse({
+      name: "Core Platform",
+      sessionKeyRouting: rules,
+    });
+    expect(createWithRules.sessionKeyRouting).toEqual(rules);
+
+    const createWithNull = createProjectSchema.parse({
+      name: "Core Platform",
+      sessionKeyRouting: null,
+    });
+    expect(createWithNull.sessionKeyRouting).toBeNull();
+
+    const createOmitted = createProjectSchema.parse({ name: "Core Platform" });
+    expect(createOmitted.sessionKeyRouting).toBeUndefined();
+
+    const updateWithRules = updateProjectSchema.parse({
+      sessionKeyRouting: rules,
+    });
+    expect(updateWithRules.sessionKeyRouting).toEqual(rules);
+
+    const updateWithNull = updateProjectSchema.parse({
+      sessionKeyRouting: null,
+    });
+    expect(updateWithNull.sessionKeyRouting).toBeNull();
+
+    const updateOmitted = updateProjectSchema.parse({});
+    expect(updateOmitted.sessionKeyRouting).toBeUndefined();
+  });
+
   it("accepts string, null, and omitted sessionKey for update", () => {
     const withString = updateProjectSchema.parse({
       sessionKey: "paperclip:core-platform",
@@ -47,6 +79,21 @@ describe("project schema sessionKey contract", () => {
     expect(() =>
       updateProjectSchema.parse({
         sessionKey: { value: "paperclip:core-platform" },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects invalid sessionKeyRouting shapes", () => {
+    expect(() =>
+      createProjectSchema.parse({
+        name: "Core Platform",
+        sessionKeyRouting: [{ pattern: "assignment:*" }],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      updateProjectSchema.parse({
+        sessionKeyRouting: [{ pattern: "", sessionKey: "route" }],
       }),
     ).toThrow();
   });

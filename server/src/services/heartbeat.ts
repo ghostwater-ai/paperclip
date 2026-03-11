@@ -75,6 +75,11 @@ interface ParsedIssueAssigneeAdapterOverrides {
   useProjectWorkspace: boolean | null;
 }
 
+type SessionKeyRoutingRule = {
+  pattern: string;
+  sessionKey: string;
+};
+
 export type ResolvedWorkspaceForRun = {
   cwd: string;
   source: "project_primary" | "task_session" | "agent_home";
@@ -347,6 +352,17 @@ function normalizeSessionParams(params: Record<string, unknown> | null | undefin
   return Object.keys(params).length > 0 ? params : null;
 }
 
+function parseSessionKeyRouting(value: unknown): SessionKeyRoutingRule[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => parseObject(entry))
+    .map((entry) => ({
+      pattern: readNonEmptyString(entry.pattern),
+      sessionKey: readNonEmptyString(entry.sessionKey),
+    }))
+    .filter((entry): entry is SessionKeyRoutingRule => Boolean(entry.pattern && entry.sessionKey));
+}
+
 export async function enrichContextWithProjectSessionKey(input: {
   db: Db;
   companyId: string;
@@ -370,6 +386,32 @@ export async function enrichContextWithProjectSessionKey(input: {
   }
 
   delete input.context.projectSessionKey;
+  return null;
+}
+
+export async function enrichContextWithProjectRouting(input: {
+  db: Db;
+  companyId: string;
+  context: Record<string, unknown>;
+}) {
+  const projectId = readNonEmptyString(input.context.projectId);
+  if (!projectId) {
+    delete input.context.projectSessionKeyRouting;
+    return null;
+  }
+
+  const projectSessionKeyRouting = await input.db
+    .select({ sessionKeyRouting: projects.sessionKeyRouting })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.companyId, input.companyId)))
+    .then((rows) => parseSessionKeyRouting(rows[0]?.sessionKeyRouting));
+
+  if (projectSessionKeyRouting.length > 0) {
+    input.context.projectSessionKeyRouting = projectSessionKeyRouting;
+    return projectSessionKeyRouting;
+  }
+
+  delete input.context.projectSessionKeyRouting;
   return null;
 }
 
@@ -1156,6 +1198,11 @@ export function heartbeatService(db: Db) {
       context.projectId = resolvedWorkspace.projectId;
     }
     await enrichContextWithProjectSessionKey({
+      db,
+      companyId: agent.companyId,
+      context,
+    });
+    await enrichContextWithProjectRouting({
       db,
       companyId: agent.companyId,
       context,
