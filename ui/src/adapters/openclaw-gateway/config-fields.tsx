@@ -6,6 +6,11 @@ import {
   DraftInput,
   help,
 } from "../../components/agent-config-primitives";
+import {
+  RoutingRulesEditor,
+  parseRoutingRules,
+  type RoutingRule,
+} from "../../components/RoutingRulesEditor";
 
 const inputClass =
   "w-full rounded-md border border-border px-2.5 py-1.5 bg-transparent outline-none text-sm font-mono placeholder:text-muted-foreground/40";
@@ -91,6 +96,12 @@ export function OpenClawGatewayConfigFields({
     "sessionKeyStrategy",
     String(config.sessionKeyStrategy ?? "fixed"),
   );
+  const sessionRoutingRules = parseRoutingRules(
+    eff("adapterConfig", "sessionKeyRouting", config.sessionKeyRouting),
+  );
+  const commitSessionRoutingRules = (rules: RoutingRule[]) => {
+    mark("adapterConfig", "sessionKeyRouting", rules.length > 0 ? rules : undefined);
+  };
 
   return (
     <>
@@ -166,6 +177,16 @@ export function OpenClawGatewayConfigFields({
               />
             </Field>
           )}
+
+          <Field
+            label="Session key routing"
+            hint="Optional ordered routing rules. Pattern matches source:reason and session key supports template variables like {{projectSessionKey}}."
+          >
+            <RoutingRulesEditor
+              rules={sessionRoutingRules}
+              onChange={commitSessionRoutingRules}
+            />
+          </Field>
 
           <SecretField
             label="Gateway auth token (x-openclaw-token)"

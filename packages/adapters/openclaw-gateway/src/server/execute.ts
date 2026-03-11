@@ -4,6 +4,10 @@ import crypto, { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
 
 type SessionKeyStrategy = "fixed" | "issue" | "run";
+export type SessionKeyRoutingRule = {
+  pattern: string;
+  sessionKey: string;
+};
 
 type WakePayload = {
   runId: string;
@@ -125,15 +129,106 @@ function normalizeSessionKeyStrategy(value: unknown): SessionKeyStrategy {
 function resolveSessionKey(input: {
   strategy: SessionKeyStrategy;
   configuredSessionKey: string | null;
-  projectSessionKey: string | null;
   runId: string;
   issueId: string | null;
 }): string {
-  if (input.projectSessionKey) return input.projectSessionKey;
   const fallback = input.configuredSessionKey ?? "paperclip";
   if (input.strategy === "run") return `paperclip:run:${input.runId}`;
   if (input.strategy === "issue" && input.issueId) return `paperclip:issue:${input.issueId}`;
   return fallback;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function parseSessionKeyRouting(value: unknown): SessionKeyRoutingRule[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => asRecord(entry))
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry))
+    .map((entry) => ({
+      pattern: nonEmpty(entry.pattern),
+      sessionKey: nonEmpty(entry.sessionKey),
+    }))
+    .filter((entry): entry is SessionKeyRoutingRule => Boolean(entry.pattern && entry.sessionKey));
+}
+
+export function matchPattern(sourceAndReason: string, pattern: string): boolean {
+  const trimmedPattern = pattern.trim();
+  if (!trimmedPattern) return false;
+  if (trimmedPattern === "*") return true;
+
+  const regexPattern = `^${escapeRegExp(trimmedPattern).replace(/\\\*/g, ".*")}$`;
+  return new RegExp(regexPattern).test(sourceAndReason);
+}
+
+export function interpolateTemplate(
+  template: string,
+  variables: Record<string, string | null | undefined>,
+): string | null {
+  if (!template.trim()) return null;
+
+  const matcher = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
+  let resolved = template;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = matcher.exec(template)) !== null) {
+    const variableName = match[1] ?? "";
+    const variableValue = variables[variableName];
+    const resolvedValue =
+      typeof variableValue === "string" && variableValue.trim().length > 0 ? variableValue.trim() : null;
+    if (!resolvedValue) return null;
+    resolved = resolved.replace(match[0], resolvedValue);
+  }
+
+  return resolved.trim().length > 0 ? resolved : null;
+}
+
+export function resolveSessionKeyFromRouting(input: {
+  projectRoutingRules?: SessionKeyRoutingRule[] | null;
+  routingRules: SessionKeyRoutingRule[];
+  wakeSource: string | null;
+  wakeReason: string | null;
+  runId: string;
+  issueId: string | null;
+  projectId: string | null;
+  projectSessionKey: string | null;
+  agentId: string;
+  fallback: {
+    strategy: SessionKeyStrategy;
+    configuredSessionKey: string | null;
+  };
+}): string {
+  const wakeSource = input.wakeSource ?? "";
+  const wakeReason = input.wakeReason ?? "";
+  const sourceAndReason = `${wakeSource}:${wakeReason}`;
+
+  const variables: Record<string, string | null> = {
+    agentId: nonEmpty(input.agentId),
+    projectId: input.projectId,
+    projectSessionKey: input.projectSessionKey,
+    issueId: input.issueId,
+    runId: nonEmpty(input.runId),
+    wakeSource: nonEmpty(input.wakeSource),
+    wakeReason: nonEmpty(input.wakeReason),
+  };
+
+  const projectRoutingRules = Array.isArray(input.projectRoutingRules) ? input.projectRoutingRules : [];
+  const orderedRules = [...projectRoutingRules, ...input.routingRules];
+
+  for (const rule of orderedRules) {
+    if (!matchPattern(sourceAndReason, rule.pattern)) continue;
+    const resolved = interpolateTemplate(rule.sessionKey, variables);
+    if (resolved) return resolved;
+  }
+
+  return resolveSessionKey({
+    strategy: input.fallback.strategy,
+    configuredSessionKey: input.fallback.configuredSessionKey,
+    runId: input.runId,
+    issueId: input.issueId,
+  });
 }
 
 function isLoopbackHost(hostname: string): boolean {
@@ -918,12 +1013,22 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const sessionKeyStrategy = normalizeSessionKeyStrategy(ctx.config.sessionKeyStrategy);
   const configuredSessionKey = nonEmpty(ctx.config.sessionKey);
   const projectSessionKey = nonEmpty(ctx.context.projectSessionKey);
-  const sessionKey = resolveSessionKey({
-    strategy: sessionKeyStrategy,
-    configuredSessionKey,
-    projectSessionKey,
+  const projectRoutingRules = parseSessionKeyRouting(ctx.context.projectSessionKeyRouting);
+  const routingRules = parseSessionKeyRouting(ctx.config.sessionKeyRouting);
+  const sessionKey = resolveSessionKeyFromRouting({
+    projectRoutingRules,
+    routingRules,
+    wakeSource: nonEmpty(ctx.context.wakeSource),
+    wakeReason: wakePayload.wakeReason,
     runId: ctx.runId,
     issueId: wakePayload.issueId,
+    projectId: nonEmpty(ctx.context.projectId),
+    projectSessionKey,
+    agentId: ctx.agent.id,
+    fallback: {
+      strategy: sessionKeyStrategy,
+      configuredSessionKey,
+    },
   });
 
   const templateMessage = nonEmpty(payloadTemplate.message) ?? nonEmpty(payloadTemplate.text);

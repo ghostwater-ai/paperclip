@@ -77,6 +77,7 @@ export type {
   Project,
   ProjectGoalRef,
   ProjectWorkspace,
+  SessionKeyRoutingRule,
   Issue,
   IssueAssigneeAdapterOverrides,
   IssueComment,

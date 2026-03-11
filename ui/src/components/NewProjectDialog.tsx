@@ -32,6 +32,7 @@ import { cn } from "../lib/utils";
 import { MarkdownEditor, type MarkdownEditorRef } from "./MarkdownEditor";
 import { StatusBadge } from "./StatusBadge";
 import { ChoosePathButton } from "./PathInstructionsModal";
+import { RoutingRulesEditor, type RoutingRule } from "./RoutingRulesEditor";
 
 const projectStatuses = [
   { value: "backlog", label: "Backlog" },
@@ -54,6 +55,7 @@ export function NewProjectDialog() {
   const [goalIds, setGoalIds] = useState<string[]>([]);
   const [targetDate, setTargetDate] = useState("");
   const [sessionKey, setSessionKey] = useState("");
+  const [sessionKeyRouting, setSessionKeyRouting] = useState<RoutingRule[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [workspaceSetup, setWorkspaceSetup] = useState<WorkspaceSetup>("none");
   const [workspaceLocalPath, setWorkspaceLocalPath] = useState("");
@@ -89,6 +91,7 @@ export function NewProjectDialog() {
     setGoalIds([]);
     setTargetDate("");
     setSessionKey("");
+    setSessionKeyRouting([]);
     setExpanded(false);
     setWorkspaceSetup("none");
     setWorkspaceLocalPath("");
@@ -151,6 +154,13 @@ export function NewProjectDialog() {
     setWorkspaceError(null);
 
     try {
+      const validSessionKeyRouting = sessionKeyRouting
+        .map((rule) => ({
+          pattern: rule.pattern.trim(),
+          sessionKey: rule.sessionKey.trim(),
+        }))
+        .filter((rule) => rule.pattern.length > 0 && rule.sessionKey.length > 0);
+
       const created = await createProject.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
@@ -159,6 +169,7 @@ export function NewProjectDialog() {
         ...(goalIds.length > 0 ? { goalIds } : {}),
         ...(targetDate ? { targetDate } : {}),
         ...(sessionKey.trim() ? { sessionKey: sessionKey.trim() } : {}),
+        ...(validSessionKeyRouting.length > 0 ? { sessionKeyRouting: validSessionKeyRouting } : {}),
       });
 
       const workspacePayloads: Array<Record<string, unknown>> = [];
@@ -467,6 +478,13 @@ export function NewProjectDialog() {
             onChange={(e) => setSessionKey(e.target.value)}
             placeholder="e.g. paperclip:my-project"
           />
+          <div className="mt-3 space-y-1.5">
+            <label className="block text-xs text-muted-foreground">Session Key Routing</label>
+            <RoutingRulesEditor
+              rules={sessionKeyRouting}
+              onChange={setSessionKeyRouting}
+            />
+          </div>
         </div>
 
         {/* Footer */}

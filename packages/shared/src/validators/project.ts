@@ -33,6 +33,11 @@ export const updateProjectWorkspaceSchema = z.object({
 
 export type UpdateProjectWorkspace = z.infer<typeof updateProjectWorkspaceSchema>;
 
+const sessionKeyRoutingRuleSchema = z.object({
+  pattern: z.string().trim().min(1),
+  sessionKey: z.string().trim().min(1),
+});
+
 const projectFields = {
   /** @deprecated Use goalIds instead */
   goalId: z.string().uuid().optional().nullable(),
@@ -43,6 +48,7 @@ const projectFields = {
   leadAgentId: z.string().uuid().optional().nullable(),
   targetDate: z.string().optional().nullable(),
   sessionKey: z.string().optional().nullable(),
+  sessionKeyRouting: z.array(sessionKeyRoutingRuleSchema).optional().nullable(),
   color: z.string().optional().nullable(),
   archivedAt: z.string().datetime().optional().nullable(),
 };
