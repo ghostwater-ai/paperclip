@@ -447,7 +447,7 @@ describe("openclaw gateway adapter execute", () => {
     expect(result.errorCode).toBe("openclaw_gateway_url_missing");
   });
 
-  it("prefers project session key over strategy-derived session key", async () => {
+  it("uses strategy-derived session key when no routing rule matches projectSessionKey", async () => {
     const gateway = await createMockGatewayServer();
 
     try {
@@ -475,13 +475,13 @@ describe("openclaw gateway adapter execute", () => {
       expect(result.exitCode).toBe(0);
       const payload = gateway.getAgentPayload();
       expect(payload).toBeTruthy();
-      expect(payload?.sessionKey).toBe("paperclip:project:alpha");
+      expect(payload?.sessionKey).toBe("paperclip:run:run-123");
     } finally {
       await gateway.close();
     }
   });
 
-  it("falls back to strategy-derived session key when project session key is null", async () => {
+  it("resolves projectSessionKey through routing templates when configured", async () => {
     const gateway = await createMockGatewayServer();
 
     try {
@@ -492,15 +492,18 @@ describe("openclaw gateway adapter execute", () => {
             headers: {
               "x-openclaw-token": "gateway-token",
             },
-            sessionKeyStrategy: "run",
+            sessionKeyRouting: [
+              { pattern: "assignment:*", sessionKey: "{{projectSessionKey}}" },
+            ],
           },
           {
             context: {
               taskId: "task-123",
               issueId: "issue-123",
+              wakeSource: "assignment",
               wakeReason: "issue_assigned",
               issueIds: ["issue-123"],
-              projectSessionKey: null,
+              projectSessionKey: "paperclip:project:alpha",
             },
           },
         ),
@@ -509,7 +512,7 @@ describe("openclaw gateway adapter execute", () => {
       expect(result.exitCode).toBe(0);
       const payload = gateway.getAgentPayload();
       expect(payload).toBeTruthy();
-      expect(payload?.sessionKey).toBe("paperclip:run:run-123");
+      expect(payload?.sessionKey).toBe("paperclip:project:alpha");
     } finally {
       await gateway.close();
     }

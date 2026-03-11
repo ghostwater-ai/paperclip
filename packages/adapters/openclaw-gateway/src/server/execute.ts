@@ -129,11 +129,9 @@ function normalizeSessionKeyStrategy(value: unknown): SessionKeyStrategy {
 function resolveSessionKey(input: {
   strategy: SessionKeyStrategy;
   configuredSessionKey: string | null;
-  projectSessionKey: string | null;
   runId: string;
   issueId: string | null;
 }): string {
-  if (input.projectSessionKey) return input.projectSessionKey;
   const fallback = input.configuredSessionKey ?? "paperclip";
   if (input.strategy === "run") return `paperclip:run:${input.runId}`;
   if (input.strategy === "issue" && input.issueId) return `paperclip:issue:${input.issueId}`;
@@ -228,7 +226,6 @@ export function resolveSessionKeyFromRouting(input: {
   return resolveSessionKey({
     strategy: input.fallback.strategy,
     configuredSessionKey: input.fallback.configuredSessionKey,
-    projectSessionKey: input.projectSessionKey,
     runId: input.runId,
     issueId: input.issueId,
   });
