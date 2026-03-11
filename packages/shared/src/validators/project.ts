@@ -34,8 +34,8 @@ export const updateProjectWorkspaceSchema = z.object({
 export type UpdateProjectWorkspace = z.infer<typeof updateProjectWorkspaceSchema>;
 
 const sessionKeyRoutingRuleSchema = z.object({
-  pattern: z.string().min(1),
-  sessionKey: z.string().min(1),
+  pattern: z.string().trim().min(1),
+  sessionKey: z.string().trim().min(1),
 });
 
 const projectFields = {

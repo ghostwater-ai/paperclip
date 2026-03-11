@@ -400,6 +400,7 @@ export function ProjectProperties({ project, onUpdate }: ProjectPropertiesProps)
           <RoutingRulesEditor
             rules={sessionKeyRoutingDraft}
             onChange={saveSessionKeyRouting}
+            immediate={false}
           />
         </div>
       </div>

@@ -9,6 +9,7 @@ export type RoutingRule = {
 type RoutingRulesEditorProps = {
   rules: RoutingRule[];
   onChange: (rules: RoutingRule[]) => void;
+  immediate?: boolean;
   className?: string;
 };
 
@@ -54,7 +55,7 @@ function moveRule(rules: RoutingRule[], fromIndex: number, toIndex: number): Rou
   return next;
 }
 
-export function RoutingRulesEditor({ rules, onChange, className }: RoutingRulesEditorProps) {
+export function RoutingRulesEditor({ rules, onChange, immediate = true, className }: RoutingRulesEditorProps) {
   const normalizedRules = useMemo(() => cloneRules(parseRoutingRules(rules)), [rules]);
   const [jsonMode, setJsonMode] = useState(false);
   const [jsonDraft, setJsonDraft] = useState("");
@@ -74,26 +75,40 @@ export function RoutingRulesEditor({ rules, onChange, className }: RoutingRulesE
     onChange(next);
   };
 
-  const handleJsonChange = (value: string) => {
-    setJsonDraft(value);
-
+  const parseJsonRules = (value: string): RoutingRule[] | null => {
     let parsedValue: unknown;
     try {
       parsedValue = JSON.parse(value);
     } catch {
       setJsonError("Invalid JSON.");
-      return;
+      return null;
     }
 
     const parsedRules = parseRoutingRules(parsedValue);
     const parsedArrayLength = Array.isArray(parsedValue) ? parsedValue.length : -1;
     if (!Array.isArray(parsedValue) || parsedRules.length !== parsedArrayLength) {
       setJsonError("JSON must be an array of { pattern, sessionKey } objects.");
-      return;
+      return null;
     }
 
     setJsonError(null);
-    onChange(parsedRules);
+    return parsedRules;
+  };
+
+  const handleJsonChange = (value: string) => {
+    setJsonDraft(value);
+    const parsedRules = parseJsonRules(value);
+    if (immediate && parsedRules) {
+      onChange(parsedRules);
+    }
+  };
+
+  const handleJsonBlur = () => {
+    if (immediate) return;
+    const parsedRules = parseJsonRules(jsonDraft);
+    if (parsedRules) {
+      onChange(parsedRules);
+    }
   };
 
   return (
@@ -125,6 +140,7 @@ export function RoutingRulesEditor({ rules, onChange, className }: RoutingRulesE
             className={inputClass + " min-h-[180px] resize-y"}
             value={jsonDraft}
             onChange={(event) => handleJsonChange(event.target.value)}
+            onBlur={handleJsonBlur}
             placeholder='[{"pattern":"timer:*","sessionKey":"heartbeat"}]'
           />
           {jsonError ? (
@@ -141,17 +157,29 @@ export function RoutingRulesEditor({ rules, onChange, className }: RoutingRulesE
                 aria-label={`Routing pattern ${index + 1}`}
                 value={rule.pattern}
                 onCommit={(value) => updateRule(index, { pattern: value })}
-                immediate
+                immediate={immediate}
                 className={inputClass}
                 placeholder="automation:issue_*"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    (event.target as HTMLInputElement).blur();
+                  }
+                }}
               />
               <DraftInput
                 aria-label={`Session key template ${index + 1}`}
                 value={rule.sessionKey}
                 onCommit={(value) => updateRule(index, { sessionKey: value })}
-                immediate
+                immediate={immediate}
                 className={inputClass}
                 placeholder="{{projectSessionKey}}"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    (event.target as HTMLInputElement).blur();
+                  }
+                }}
               />
               <div className="flex items-center gap-1">
                 <button

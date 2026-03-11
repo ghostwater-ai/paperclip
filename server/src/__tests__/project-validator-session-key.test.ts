@@ -96,5 +96,17 @@ describe("project schema sessionKey contract", () => {
         sessionKeyRouting: [{ pattern: "", sessionKey: "route" }],
       }),
     ).toThrow();
+
+    expect(() =>
+      updateProjectSchema.parse({
+        sessionKeyRouting: [{ pattern: "   ", sessionKey: "route" }],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      updateProjectSchema.parse({
+        sessionKeyRouting: [{ pattern: "assignment:*", sessionKey: "   " }],
+      }),
+    ).toThrow();
   });
 });

@@ -165,11 +165,21 @@ describe("Project session key routing UI", () => {
     fireEvent.change(screen.getByLabelText("Routing pattern 1"), {
       target: { value: "assignment:*" },
     });
+    fireEvent.blur(screen.getByLabelText("Routing pattern 1"));
+    expect(onUpdate).not.toHaveBeenCalledWith({
+      sessionKeyRouting: [
+        {
+          pattern: "assignment:*",
+          sessionKey: "{{projectSessionKey}}",
+        },
+      ],
+    });
     fireEvent.change(screen.getByLabelText("Session key template 1"), {
       target: { value: "{{projectSessionKey}}" },
     });
+    fireEvent.blur(screen.getByLabelText("Session key template 1"));
 
-    expect(onUpdate).toHaveBeenCalledWith({
+    expect(onUpdate).toHaveBeenLastCalledWith({
       sessionKeyRouting: [
         {
           pattern: "assignment:*",
