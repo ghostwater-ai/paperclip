@@ -55,6 +55,7 @@ const reasonReference: Array<{ reason: string; source: string; when: string }> =
 const patternExamples: Array<{ pattern: string; meaning: string }> = [
   { pattern: "*", meaning: "Matches every source:reason event." },
   { pattern: "timer:*", meaning: "Matches any timer reason." },
+  { pattern: "assignment:issue_assigned", meaning: "Exact match for assignment wake-ups when an issue is assigned." },
   { pattern: "*:issue_assigned", meaning: "Matches issue_assigned from any source." },
   { pattern: "automation:issue_*", meaning: "Matches automation reasons starting with issue_." },
   { pattern: "timer:heartbeat_timer", meaning: "Exact match for one source:reason pair." },

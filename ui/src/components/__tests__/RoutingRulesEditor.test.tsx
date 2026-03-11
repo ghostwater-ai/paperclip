@@ -53,6 +53,7 @@ describe("RoutingRulesEditor", () => {
     expect(screen.getByText("issue_execution_deferred")).toBeTruthy();
     expect(screen.getByText("approval_approved")).toBeTruthy();
     expect(screen.getByText("stale_checkout_run")).toBeTruthy();
+    expect(screen.getByText("assignment:issue_assigned")).toBeTruthy();
     expect(screen.getAllByText("{{projectSessionKey}}").length).toBeGreaterThan(0);
     expect(screen.getByText("slack:channel:c0ag0u06yka")).toBeTruthy();
 
