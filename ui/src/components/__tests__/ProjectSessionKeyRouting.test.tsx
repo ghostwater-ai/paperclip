@@ -142,6 +142,36 @@ describe("Project session key routing UI", () => {
     );
   });
 
+  it("omits sessionKeyRouting on create when all routing rows are incomplete", async () => {
+    mocks.goalsList.mockResolvedValue([]);
+    mocks.projectsCreate.mockResolvedValue({ id: "project-234" });
+    mocks.projectsCreateWorkspace.mockResolvedValue({});
+
+    renderWithQuery(<NewProjectDialog />);
+
+    fireEvent.change(screen.getByPlaceholderText("Project name"), {
+      target: { value: "Incomplete Routing Project" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
+    fireEvent.change(screen.getByLabelText("Routing pattern 1"), {
+      target: { value: "assignment:*" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+
+    await waitFor(() => {
+      expect(mocks.projectsCreate).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mocks.projectsCreate).toHaveBeenCalledWith(
+      "company-1",
+      expect.not.objectContaining({
+        sessionKeyRouting: expect.anything(),
+      }),
+    );
+  });
+
   it("persists routing rule edits in Project Properties and keeps Session Key behavior", () => {
     mocks.goalsList.mockResolvedValue([]);
     const onUpdate = vi.fn();

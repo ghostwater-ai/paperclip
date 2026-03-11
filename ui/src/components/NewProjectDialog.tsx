@@ -154,6 +154,13 @@ export function NewProjectDialog() {
     setWorkspaceError(null);
 
     try {
+      const validSessionKeyRouting = sessionKeyRouting
+        .map((rule) => ({
+          pattern: rule.pattern.trim(),
+          sessionKey: rule.sessionKey.trim(),
+        }))
+        .filter((rule) => rule.pattern.length > 0 && rule.sessionKey.length > 0);
+
       const created = await createProject.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
@@ -162,7 +169,7 @@ export function NewProjectDialog() {
         ...(goalIds.length > 0 ? { goalIds } : {}),
         ...(targetDate ? { targetDate } : {}),
         ...(sessionKey.trim() ? { sessionKey: sessionKey.trim() } : {}),
-        ...(sessionKeyRouting.length > 0 ? { sessionKeyRouting } : {}),
+        ...(validSessionKeyRouting.length > 0 ? { sessionKeyRouting: validSessionKeyRouting } : {}),
       });
 
       const workspacePayloads: Array<Record<string, unknown>> = [];
