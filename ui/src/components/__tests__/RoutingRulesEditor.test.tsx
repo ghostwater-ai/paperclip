@@ -30,6 +30,24 @@ afterEach(() => {
 });
 
 describe("RoutingRulesEditor", () => {
+  it("shows a row-mode reference trigger and opens/closes the help modal with required sections", () => {
+    render(<Harness />);
+
+    const trigger = screen.getByRole("button", { name: "Routing rules reference" });
+    expect(trigger).toBeTruthy();
+
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole("heading", { name: "Routing Rules Reference" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Pattern Format" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Source / Reason Reference" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Pattern Matching Examples" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Template Variable Reference" })).toBeTruthy();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Close" })[0]);
+    expect(screen.queryByRole("heading", { name: "Routing Rules Reference" })).toBeNull();
+  });
+
   it("supports add, remove, reorder and emits ordered rules", () => {
     const onRules = vi.fn();
     render(<Harness onRules={onRules} />);

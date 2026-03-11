@@ -1,4 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
+import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
 import { DraftInput } from "./agent-config-primitives";
 
 export type RoutingRule = {
@@ -20,6 +30,34 @@ const emptyRule: RoutingRule = {
   pattern: "",
   sessionKey: "",
 };
+
+const sourceReasonReference: Array<{ source: string; reasons: string }> = [
+  { source: "timer", reasons: "heartbeat_timer, interval_elapsed" },
+  { source: "assignment", reasons: "issue_assigned, issue_checked_out" },
+  {
+    source: "automation",
+    reasons: "issue_status_changed, issue_comment_mentioned, issue_commented, issue_reopened_via_comment",
+  },
+  { source: "on_demand", reasons: "manual, ping, callback, system" },
+];
+
+const patternExamples: Array<{ pattern: string; meaning: string }> = [
+  { pattern: "*", meaning: "Matches every source:reason event." },
+  { pattern: "timer:*", meaning: "Matches any timer reason." },
+  { pattern: "*:issue_assigned", meaning: "Matches issue_assigned from any source." },
+  { pattern: "automation:issue_*", meaning: "Matches automation reasons starting with issue_." },
+  { pattern: "timer:heartbeat_timer", meaning: "Exact match for one source:reason pair." },
+];
+
+const templateVariables: Array<{ variable: string; description: string }> = [
+  { variable: "wakeSource", description: "Event source used by the pattern match." },
+  { variable: "wakeReason", description: "Event reason used by the pattern match." },
+  { variable: "projectId", description: "Project id for project-scoped events." },
+  { variable: "projectSessionKey", description: "Project session key value when set on the project." },
+  { variable: "issueId", description: "Issue id when the wake event is issue-related." },
+  { variable: "runId", description: "Heartbeat run id for the current invocation." },
+  { variable: "agentId", description: "Agent id for the run currently being routed." },
+];
 
 function cloneRules(rules: RoutingRule[]): RoutingRule[] {
   return rules.map((rule) => ({
@@ -114,7 +152,128 @@ export function RoutingRulesEditor({ rules, onChange, immediate = true, classNam
   return (
     <div className={className ?? "space-y-2"}>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">Ordered rules, first match wins.</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Ordered rules, first match wins.</span>
+          {!jsonMode ? (
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button
+                  type="button"
+                  variant="link"
+                  size="xs"
+                  className="h-auto p-0 text-xs text-muted-foreground"
+                  aria-label="Routing rules reference"
+                >
+                  Reference
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle className="text-base">Routing Rules Reference</DialogTitle>
+                  <DialogDescription>
+                    Pattern syntax, source and reason values, routing examples, and template variables.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 text-sm">
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold">Pattern Format</h3>
+                    <p className="text-muted-foreground">
+                      Patterns match against <span className="font-mono">source:reason</span> using glob wildcards.
+                    </p>
+                    <ul className="list-disc pl-5 text-muted-foreground">
+                      <li>
+                        Use <span className="font-mono">*</span> to match everything.
+                      </li>
+                      <li>
+                        Use <span className="font-mono">timer:*</span> to match a source with any reason.
+                      </li>
+                      <li>
+                        Use <span className="font-mono">*:issue_assigned</span> to match a reason from any source.
+                      </li>
+                      <li>
+                        Use <span className="font-mono">automation:issue_*</span> for prefix matching.
+                      </li>
+                    </ul>
+                  </section>
+
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold">Source / Reason Reference</h3>
+                    <div className="overflow-x-auto rounded-md border border-border">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-accent/40">
+                          <tr>
+                            <th className="px-2 py-1.5 font-medium">Source</th>
+                            <th className="px-2 py-1.5 font-medium">Common Reasons</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sourceReasonReference.map((entry) => (
+                            <tr key={entry.source} className="border-t border-border">
+                              <td className="px-2 py-1.5 font-mono">{entry.source}</td>
+                              <td className="px-2 py-1.5 font-mono">{entry.reasons}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold">Pattern Matching Examples</h3>
+                    <div className="overflow-x-auto rounded-md border border-border">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-accent/40">
+                          <tr>
+                            <th className="px-2 py-1.5 font-medium">Pattern</th>
+                            <th className="px-2 py-1.5 font-medium">Behavior</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {patternExamples.map((entry) => (
+                            <tr key={entry.pattern} className="border-t border-border">
+                              <td className="px-2 py-1.5 font-mono">{entry.pattern}</td>
+                              <td className="px-2 py-1.5">{entry.meaning}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold">Template Variable Reference</h3>
+                    <div className="overflow-x-auto rounded-md border border-border">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-accent/40">
+                          <tr>
+                            <th className="px-2 py-1.5 font-medium">Variable</th>
+                            <th className="px-2 py-1.5 font-medium">Description</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {templateVariables.map((entry) => (
+                            <tr key={entry.variable} className="border-t border-border">
+                              <td className="px-2 py-1.5 font-mono">{`{{${entry.variable}}}`}</td>
+                              <td className="px-2 py-1.5">{entry.description}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      If a template variable cannot be resolved (for example{" "}
+                      <span className="font-mono">{`{{projectSessionKey}}`}</span> when no project session key is
+                      available), that rule is skipped and evaluation continues to the next rule.
+                    </p>
+                  </section>
+                </div>
+
+                <DialogFooter showCloseButton />
+              </DialogContent>
+            </Dialog>
+          ) : null}
+        </div>
         <button
           type="button"
           className="inline-flex items-center rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent/50 transition-colors"
