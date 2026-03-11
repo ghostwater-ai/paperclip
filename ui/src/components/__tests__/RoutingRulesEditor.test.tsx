@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 describe("RoutingRulesEditor", () => {
-  it("shows a row-mode reference trigger and opens/closes the help modal with required sections", () => {
+  it("shows a row-mode reference trigger and opens/closes the help modal with required sections and content", () => {
     render(<Harness />);
 
     const trigger = screen.getByRole("button", { name: "Routing rules reference" });
@@ -40,9 +40,21 @@ describe("RoutingRulesEditor", () => {
 
     expect(screen.getByRole("heading", { name: "Routing Rules Reference" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Pattern Format" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Source / Reason Reference" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Sources" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Reasons" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Pattern Matching Examples" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Template Variable Reference" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Template Variables" })).toBeTruthy();
+
+    expect(screen.getByText("heartbeat_timer")).toBeTruthy();
+    expect(screen.getAllByText("issue_assigned").length).toBeGreaterThan(0);
+    expect(screen.getByText("issue_status_changed")).toBeTruthy();
+    expect(screen.getByText("manual trigger or API call", { exact: false })).toBeTruthy();
+    expect(screen.getByText("issue_execution_promoted")).toBeTruthy();
+    expect(screen.getByText("issue_execution_deferred")).toBeTruthy();
+    expect(screen.getByText("approval_approved")).toBeTruthy();
+    expect(screen.getByText("stale_checkout_run")).toBeTruthy();
+    expect(screen.getAllByText("{{projectSessionKey}}").length).toBeGreaterThan(0);
+    expect(screen.getByText("slack:channel:c0ag0u06yka")).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Close" })[0]);
     expect(screen.queryByRole("heading", { name: "Routing Rules Reference" })).toBeNull();

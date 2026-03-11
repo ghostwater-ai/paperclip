@@ -31,14 +31,25 @@ const emptyRule: RoutingRule = {
   sessionKey: "",
 };
 
-const sourceReasonReference: Array<{ source: string; reasons: string }> = [
-  { source: "timer", reasons: "heartbeat_timer, interval_elapsed" },
-  { source: "assignment", reasons: "issue_assigned, issue_checked_out" },
-  {
-    source: "automation",
-    reasons: "issue_status_changed, issue_comment_mentioned, issue_commented, issue_reopened_via_comment",
-  },
-  { source: "on_demand", reasons: "manual, ping, callback, system" },
+const sourceReference: Array<{ source: string; when: string }> = [
+  { source: "timer", when: "Heartbeat timer fires" },
+  { source: "assignment", when: "Issue assigned to agent" },
+  { source: "automation", when: "Automated issue processing (comments, status changes, mentions)" },
+  { source: "on_demand", when: "Manual trigger or API call" },
+];
+
+const reasonReference: Array<{ reason: string; source: string; when: string }> = [
+  { reason: "heartbeat_timer", source: "timer", when: "Scheduled heartbeat interval elapsed" },
+  { reason: "issue_assigned", source: "assignment", when: "Issue assigned to this agent" },
+  { reason: "issue_status_changed", source: "automation", when: "Issue status was updated" },
+  { reason: "issue_comment_mentioned", source: "automation", when: "Agent mentioned in a comment" },
+  { reason: "issue_commented", source: "automation", when: "New comment on agent's issue" },
+  { reason: "issue_checked_out", source: "assignment", when: "Issue checked out to agent" },
+  { reason: "issue_reopened_via_comment", source: "automation", when: "Issue reopened via comment" },
+  { reason: "issue_execution_promoted", source: "automation", when: "Issue promoted for execution" },
+  { reason: "issue_execution_deferred", source: "automation", when: "Issue execution deferred" },
+  { reason: "approval_approved", source: "automation", when: "Approval request approved" },
+  { reason: "stale_checkout_run", source: "automation", when: "Stale checkout detected" },
 ];
 
 const patternExamples: Array<{ pattern: string; meaning: string }> = [
@@ -49,14 +60,18 @@ const patternExamples: Array<{ pattern: string; meaning: string }> = [
   { pattern: "timer:heartbeat_timer", meaning: "Exact match for one source:reason pair." },
 ];
 
-const templateVariables: Array<{ variable: string; description: string }> = [
-  { variable: "wakeSource", description: "Event source used by the pattern match." },
-  { variable: "wakeReason", description: "Event reason used by the pattern match." },
-  { variable: "projectId", description: "Project id for project-scoped events." },
-  { variable: "projectSessionKey", description: "Project session key value when set on the project." },
-  { variable: "issueId", description: "Issue id when the wake event is issue-related." },
-  { variable: "runId", description: "Heartbeat run id for the current invocation." },
-  { variable: "agentId", description: "Agent id for the run currently being routed." },
+const templateVariables: Array<{ variable: string; description: string; example: string }> = [
+  { variable: "agentId", description: "The agent's ID", example: "7be025d0-..." },
+  { variable: "projectId", description: "Current project ID", example: "abc123" },
+  {
+    variable: "projectSessionKey",
+    description: "Project's configured session key",
+    example: "slack:channel:c0ag0u06yka",
+  },
+  { variable: "issueId", description: "Issue being processed", example: "issue-42" },
+  { variable: "runId", description: "Current execution run ID", example: "run-xyz" },
+  { variable: "wakeSource", description: "Wake event source", example: "timer" },
+  { variable: "wakeReason", description: "Wake event reason", example: "issue_assigned" },
 ];
 
 function cloneRules(rules: RoutingRule[]): RoutingRule[] {
@@ -198,20 +213,44 @@ export function RoutingRulesEditor({ rules, onChange, immediate = true, classNam
                   </section>
 
                   <section className="space-y-2">
-                    <h3 className="text-sm font-semibold">Source / Reason Reference</h3>
+                    <h3 className="text-sm font-semibold">Sources</h3>
                     <div className="overflow-x-auto rounded-md border border-border">
                       <table className="w-full text-left text-xs">
                         <thead className="bg-accent/40">
                           <tr>
                             <th className="px-2 py-1.5 font-medium">Source</th>
-                            <th className="px-2 py-1.5 font-medium">Common Reasons</th>
+                            <th className="px-2 py-1.5 font-medium">When</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {sourceReasonReference.map((entry) => (
+                          {sourceReference.map((entry) => (
                             <tr key={entry.source} className="border-t border-border">
                               <td className="px-2 py-1.5 font-mono">{entry.source}</td>
-                              <td className="px-2 py-1.5 font-mono">{entry.reasons}</td>
+                              <td className="px-2 py-1.5">{entry.when}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold">Reasons</h3>
+                    <div className="overflow-x-auto rounded-md border border-border">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-accent/40">
+                          <tr>
+                            <th className="px-2 py-1.5 font-medium">Reason</th>
+                            <th className="px-2 py-1.5 font-medium">Source</th>
+                            <th className="px-2 py-1.5 font-medium">When</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reasonReference.map((entry) => (
+                            <tr key={entry.reason} className="border-t border-border">
+                              <td className="px-2 py-1.5 font-mono">{entry.reason}</td>
+                              <td className="px-2 py-1.5 font-mono">{entry.source}</td>
+                              <td className="px-2 py-1.5">{entry.when}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -242,13 +281,14 @@ export function RoutingRulesEditor({ rules, onChange, immediate = true, classNam
                   </section>
 
                   <section className="space-y-2">
-                    <h3 className="text-sm font-semibold">Template Variable Reference</h3>
+                    <h3 className="text-sm font-semibold">Template Variables</h3>
                     <div className="overflow-x-auto rounded-md border border-border">
                       <table className="w-full text-left text-xs">
                         <thead className="bg-accent/40">
                           <tr>
                             <th className="px-2 py-1.5 font-medium">Variable</th>
                             <th className="px-2 py-1.5 font-medium">Description</th>
+                            <th className="px-2 py-1.5 font-medium">Example</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -256,6 +296,7 @@ export function RoutingRulesEditor({ rules, onChange, immediate = true, classNam
                             <tr key={entry.variable} className="border-t border-border">
                               <td className="px-2 py-1.5 font-mono">{`{{${entry.variable}}}`}</td>
                               <td className="px-2 py-1.5">{entry.description}</td>
+                              <td className="px-2 py-1.5 font-mono">{entry.example}</td>
                             </tr>
                           ))}
                         </tbody>
