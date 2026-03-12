@@ -5,6 +5,7 @@ import { execute, testEnvironment } from "@paperclipai/adapter-openclaw-gateway/
 import {
   interpolateTemplate,
   matchPattern,
+  resolveDotPath,
   resolveSessionKeyFromRouting,
 } from "../../../packages/adapters/openclaw-gateway/src/server/execute";
 import {
@@ -417,6 +418,38 @@ describe("openclaw gateway routing helpers", () => {
     expect(text).toBe("session:agent-1:run-1:issue-1:");
   });
 
+  it("resolves dot-path template variables", () => {
+    const text = interpolateTemplate(
+      "session:{{project.metadata.sessionKey}}:${project.id}:${project.name}",
+      {
+        project: {
+          id: "project-1",
+          name: "Core Platform",
+          metadata: {
+            sessionKey: "project-session-1",
+          },
+        },
+      },
+    );
+    expect(text).toBe("session:project-session-1:project-1:Core Platform");
+  });
+
+  it("resolves nested values with resolveDotPath helper", () => {
+    const variables = {
+      project: {
+        metadata: {
+          routes: {
+            primary: "alpha",
+          },
+        },
+      },
+    };
+
+    expect(resolveDotPath(variables, "project.metadata.routes.primary")).toBe("alpha");
+    expect(resolveDotPath(variables, "project.metadata.missing")).toBeUndefined();
+    expect(resolveDotPath(variables, "project.metadata")).toEqual({ routes: { primary: "alpha" } });
+  });
+
   it("resolves first matching routing rule and interpolates values", () => {
     const result = resolveSessionKeyFromRouting({
       routingRules: [
@@ -454,6 +487,42 @@ describe("openclaw gateway routing helpers", () => {
     });
 
     expect(result).toBe("fallback-session");
+  });
+
+  it("routes with project metadata dot-path variables and skips unknown dot-paths", () => {
+    const result = resolveSessionKeyFromRouting({
+      routingRules: [
+        { pattern: "assignment:*", sessionKey: "route:{{project.metadata.unknown}}" },
+        { pattern: "assignment:*", sessionKey: "route:{{project.metadata.sessionKey}}" },
+      ],
+      wakeSource: "assignment",
+      wakeReason: "issue_assigned",
+      runId: "run-1",
+      issueId: "issue-1",
+      paperclipAgentId: "paperclip-agent-1",
+      adapterAgentId: "gateway-agent-1",
+      routingVariables: {
+        project: {
+          id: "project-1",
+          name: "Core Platform",
+          metadata: {
+            sessionKey: "project-session-1",
+          },
+        },
+        paperclipAgentId: "paperclip-agent-1",
+        adapterAgentId: "gateway-agent-1",
+        issueId: "issue-1",
+        runId: "run-1",
+        wakeSource: "assignment",
+        wakeReason: "issue_assigned",
+      },
+      fallback: {
+        strategy: "fixed",
+        configuredSessionKey: "fallback-session",
+      },
+    });
+
+    expect(result).toBe("route:project-session-1");
   });
 });
 
@@ -629,7 +698,10 @@ describe("openclaw gateway adapter execute", () => {
             },
             sessionKeyStrategy: "routing",
             sessionKeyRouting: [
-              { pattern: "assignment:*", sessionKey: "route:{{paperclipAgentId}}:{{issueId}}" },
+              {
+                pattern: "assignment:*",
+                sessionKey: "route:{{project.metadata.sessionKey}}:{{paperclipAgentId}}:{{issueId}}",
+              },
               { pattern: "*:*", sessionKey: "route:default" },
             ],
             waitTimeoutMs: 2000,
@@ -638,16 +710,24 @@ describe("openclaw gateway adapter execute", () => {
             context: {
               taskId: "task-123",
               issueId: "issue-123",
+              projectId: "project-123",
               wakeSource: "assignment",
               wakeReason: "issue_assigned",
               issueIds: ["issue-123"],
+              project: {
+                id: "project-123",
+                name: "Project Alpha",
+                metadata: {
+                  sessionKey: "project-session-123",
+                },
+              },
             },
           },
         ),
       );
 
       expect(result.exitCode).toBe(0);
-      expect(gateway.getAgentPayload()?.sessionKey).toBe("route:agent-123:issue-123");
+      expect(gateway.getAgentPayload()?.sessionKey).toBe("route:project-session-123:agent-123:issue-123");
     } finally {
       await gateway.close();
     }
