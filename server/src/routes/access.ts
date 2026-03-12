@@ -406,6 +406,22 @@ function parseBooleanLike(value: unknown): boolean | null {
   return null;
 }
 
+function parseSessionKeyRouting(value: unknown): Array<{
+  pattern: string;
+  sessionKey: string;
+}> {
+  if (!Array.isArray(value)) return [];
+  const rules: Array<{ pattern: string; sessionKey: string }> = [];
+  for (const entry of value) {
+    if (!isPlainObject(entry)) continue;
+    const pattern = nonEmptyTrimmedString(entry.pattern);
+    const sessionKey = nonEmptyTrimmedString(entry.sessionKey);
+    if (!pattern || !sessionKey) continue;
+    rules.push({ pattern, sessionKey });
+  }
+  return rules;
+}
+
 function generateEd25519PrivateKeyPem(): string {
   const generated = generateKeyPairSync("ed25519");
   return generated.privateKey
@@ -785,9 +801,15 @@ export function normalizeAgentDefaultsForJoin(input: {
   if (
     sessionKeyStrategy === "fixed" ||
     sessionKeyStrategy === "issue" ||
-    sessionKeyStrategy === "run"
+    sessionKeyStrategy === "run" ||
+    sessionKeyStrategy === "routing"
   ) {
     normalized.sessionKeyStrategy = sessionKeyStrategy;
+  }
+
+  const sessionKeyRouting = parseSessionKeyRouting(defaults.sessionKeyRouting);
+  if (sessionKeyRouting.length > 0) {
+    normalized.sessionKeyRouting = sessionKeyRouting;
   }
 
   const sessionKey = nonEmptyTrimmedString(defaults.sessionKey);
