@@ -241,7 +241,7 @@ export function resolveSessionKeyFromRouting(input: {
     const hasUnknownVar = extractMustacheTemplateVariables(rule.sessionKey)
       .some((varName) => (
         varName.includes(".")
-          ? resolveDotPath(variables, varName) === undefined
+          ? resolveDotPath(variables, varName) == null
           : !(varName in variables)
       ));
     if (hasUnknownVar) continue;
