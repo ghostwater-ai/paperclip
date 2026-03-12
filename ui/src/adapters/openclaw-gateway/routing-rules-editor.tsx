@@ -211,7 +211,7 @@ export function RoutingRulesEditor({
               </div>
             )}
             {rules.map((rule, index) => (
-              <div key={`${index}:${rule.pattern}:${rule.sessionKey}`} className="rounded-md border border-border p-2 space-y-2">
+              <div key={index} className="rounded-md border border-border p-2 space-y-2">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <DraftInput
                     value={rule.pattern}
