@@ -202,12 +202,9 @@ export function interpolateTemplate(
     .replace(/\$\{([a-zA-Z0-9_.]+)\}/g, (_match, key) => replace(key));
 }
 
-function extractTemplateVariables(template: string): string[] {
+function extractMustacheTemplateVariables(template: string): string[] {
   const vars = new Set<string>();
   for (const match of template.matchAll(/{{\s*([a-zA-Z0-9_.]+)\s*}}/g)) {
-    vars.add(match[1] ?? "");
-  }
-  for (const match of template.matchAll(/\$\{([a-zA-Z0-9_.]+)\}/g)) {
     vars.add(match[1] ?? "");
   }
   return Array.from(vars).filter(Boolean);
@@ -241,8 +238,12 @@ export function resolveSessionKeyFromRouting(input: {
   for (const rule of input.routingRules) {
     if (!matchPattern(rule.pattern, key)) continue;
     // Check if template references any variable not in the map.
-    const hasUnknownVar = extractTemplateVariables(rule.sessionKey)
-      .some((varName) => resolveDotPath(variables, varName) == null);
+    const hasUnknownVar = extractMustacheTemplateVariables(rule.sessionKey)
+      .some((varName) => (
+        varName.includes(".")
+          ? resolveDotPath(variables, varName) === undefined
+          : !(varName in variables)
+      ));
     if (hasUnknownVar) continue;
     const resolved = interpolateTemplate(rule.sessionKey, variables).trim();
     // Skip malformed results (empty, trailing colon, double colon)
