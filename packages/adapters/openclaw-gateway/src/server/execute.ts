@@ -199,16 +199,27 @@ export function resolveSessionKeyFromRouting(input: {
   const wakeSource = input.wakeSource ?? "";
   const wakeReason = input.wakeReason ?? "";
   const key = `${wakeSource}:${wakeReason}`;
+  const variables: Record<string, string | null | undefined> = {
+    paperclipAgentId: input.paperclipAgentId,
+    adapterAgentId: input.adapterAgentId,
+    issueId: input.issueId,
+    runId: input.runId,
+    wakeSource: input.wakeSource,
+    wakeReason: input.wakeReason,
+  };
   for (const rule of input.routingRules) {
     if (!matchPattern(rule.pattern, key)) continue;
-    return interpolateTemplate(rule.sessionKey, {
-      paperclipAgentId: input.paperclipAgentId,
-      adapterAgentId: input.adapterAgentId,
-      issueId: input.issueId,
-      runId: input.runId,
-      wakeSource: input.wakeSource,
-      wakeReason: input.wakeReason,
-    });
+    // Check if template references any variable not in the map
+    const hasUnknownVar = /{{\s*([a-zA-Z0-9_]+)\s*}}/.test(rule.sessionKey) &&
+      rule.sessionKey.match(/{{\s*([a-zA-Z0-9_]+)\s*}}/g)?.some((m) => {
+        const varName = m.replace(/[{}\s]/g, "");
+        return !(varName in variables);
+      });
+    if (hasUnknownVar) continue;
+    const resolved = interpolateTemplate(rule.sessionKey, variables).trim();
+    // Skip malformed results (empty, trailing colon, double colon)
+    if (!resolved || resolved.endsWith(":") || resolved.includes("::")) continue;
+    return resolved;
   }
 
   const fallbackStrategy = input.fallback.strategy === "routing" ? "issue" : input.fallback.strategy;
