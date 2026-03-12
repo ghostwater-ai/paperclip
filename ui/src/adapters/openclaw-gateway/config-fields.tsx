@@ -10,6 +10,8 @@ import {
   PayloadTemplateJsonField,
   RuntimeServicesJsonField,
 } from "../runtime-json-fields";
+import { RoutingRulesEditor } from "./routing-rules-editor";
+import { parseSessionKeyRouting } from "./session-key-routing";
 
 const inputClass =
   "w-full rounded-md border border-border px-2.5 py-1.5 bg-transparent outline-none text-sm font-mono placeholder:text-muted-foreground/40";
@@ -95,6 +97,9 @@ export function OpenClawGatewayConfigFields({
     "sessionKeyStrategy",
     String(config.sessionKeyStrategy ?? "fixed"),
   );
+  const sessionKeyRouting = parseSessionKeyRouting(
+    eff("adapterConfig", "sessionKeyRouting", config.sessionKeyRouting ?? []),
+  );
 
   return (
     <>
@@ -159,6 +164,7 @@ export function OpenClawGatewayConfigFields({
               <option value="fixed">Fixed</option>
               <option value="issue">Per issue</option>
               <option value="run">Per run</option>
+              <option value="routing">Rule-based</option>
             </select>
           </Field>
 
@@ -172,6 +178,16 @@ export function OpenClawGatewayConfigFields({
                 placeholder="paperclip"
               />
             </Field>
+          )}
+
+          {sessionStrategy === "routing" && (
+            <RoutingRulesEditor
+              value={sessionKeyRouting}
+              onChange={(nextRules) => {
+                const sanitized = parseSessionKeyRouting(nextRules);
+                mark("adapterConfig", "sessionKeyRouting", sanitized.length > 0 ? sanitized : undefined);
+              }}
+            />
           )}
 
           <SecretField
