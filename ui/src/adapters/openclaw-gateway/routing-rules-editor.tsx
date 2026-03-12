@@ -44,6 +44,9 @@ export const templateVariables = [
   "runId",
   "wakeSource",
   "wakeReason",
+  "project.id",
+  "project.name",
+  "project.metadata.<key>",
 ];
 
 export function moveRule(rules: SessionKeyRoutingRule[], fromIndex: number, toIndex: number): SessionKeyRoutingRule[] {
@@ -171,6 +174,9 @@ export function RoutingRulesEditor({
 
                   <section>
                     <h4 className="font-medium mb-1">Template variables</h4>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Use dot-path syntax for nested values (for example, <code>{"{{project.metadata.sessionKey}}"}</code>).
+                    </p>
                     <table className="w-full text-xs border border-border rounded-md overflow-hidden">
                       <tbody>
                         {templateVariables.map((entry) => (

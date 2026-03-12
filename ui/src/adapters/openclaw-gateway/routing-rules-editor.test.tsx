@@ -154,6 +154,9 @@ describe("RoutingRulesEditor", () => {
       "runId",
       "wakeSource",
       "wakeReason",
+      "project.id",
+      "project.name",
+      "project.metadata.<key>",
     ]);
   });
 });
