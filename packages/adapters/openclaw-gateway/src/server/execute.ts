@@ -170,17 +170,47 @@ export function matchPattern(pattern: string, value: string): boolean {
   return patternToRegExp(normalizedPattern).test(value);
 }
 
+export function resolveDotPath(obj: unknown, path: string): unknown {
+  const trimmedPath = path.trim();
+  if (!trimmedPath) return undefined;
+
+  let current: unknown = obj;
+  for (const segment of trimmedPath.split(".")) {
+    if (!segment) return undefined;
+    if (typeof current !== "object" || current === null) return undefined;
+    if (!(segment in current)) return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
 export function interpolateTemplate(
   template: string,
-  variables: Record<string, string | null | undefined>,
+  variables: Record<string, unknown>,
 ): string {
-  const replace = (key: string) => {
-    const value = variables[key];
-    return value == null ? "" : value;
+  const replace = (path: string) => {
+    const value = resolveDotPath(variables, path);
+    if (value == null) return "";
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+      return String(value);
+    }
+    return "";
   };
   return template
-    .replace(/{{\s*([a-zA-Z0-9_]+)\s*}}/g, (_match, key) => replace(key))
-    .replace(/\$\{([a-zA-Z0-9_]+)\}/g, (_match, key) => replace(key));
+    .replace(/{{\s*([a-zA-Z0-9_.]+)\s*}}/g, (_match, key) => replace(key))
+    .replace(/\$\{([a-zA-Z0-9_.]+)\}/g, (_match, key) => replace(key));
+}
+
+function extractTemplateVariables(template: string): string[] {
+  const vars = new Set<string>();
+  for (const match of template.matchAll(/{{\s*([a-zA-Z0-9_.]+)\s*}}/g)) {
+    vars.add(match[1] ?? "");
+  }
+  for (const match of template.matchAll(/\$\{([a-zA-Z0-9_.]+)\}/g)) {
+    vars.add(match[1] ?? "");
+  }
+  return Array.from(vars).filter(Boolean);
 }
 
 export function resolveSessionKeyFromRouting(input: {
@@ -191,6 +221,7 @@ export function resolveSessionKeyFromRouting(input: {
   issueId: string | null;
   paperclipAgentId: string;
   adapterAgentId: string | null;
+  routingVariables?: Record<string, unknown>;
   fallback: {
     strategy: SessionKeyStrategy;
     configuredSessionKey: string | null;
@@ -199,7 +230,7 @@ export function resolveSessionKeyFromRouting(input: {
   const wakeSource = input.wakeSource ?? "";
   const wakeReason = input.wakeReason ?? "";
   const key = `${wakeSource}:${wakeReason}`;
-  const variables: Record<string, string | null | undefined> = {
+  const variables: Record<string, unknown> = input.routingVariables ?? {
     paperclipAgentId: input.paperclipAgentId,
     adapterAgentId: input.adapterAgentId,
     issueId: input.issueId,
@@ -209,12 +240,9 @@ export function resolveSessionKeyFromRouting(input: {
   };
   for (const rule of input.routingRules) {
     if (!matchPattern(rule.pattern, key)) continue;
-    // Check if template references any variable not in the map
-    const hasUnknownVar = /{{\s*([a-zA-Z0-9_]+)\s*}}/.test(rule.sessionKey) &&
-      rule.sessionKey.match(/{{\s*([a-zA-Z0-9_]+)\s*}}/g)?.some((m) => {
-        const varName = m.replace(/[{}\s]/g, "");
-        return !(varName in variables);
-      });
+    // Check if template references any variable not in the map.
+    const hasUnknownVar = extractTemplateVariables(rule.sessionKey)
+      .some((varName) => resolveDotPath(variables, varName) == null);
     if (hasUnknownVar) continue;
     const resolved = interpolateTemplate(rule.sessionKey, variables).trim();
     // Skip malformed results (empty, trailing colon, double colon)
@@ -1154,6 +1182,20 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const configuredAgentId = nonEmpty(ctx.config.agentId);
   const templateAgentId = nonEmpty(payloadTemplate.agentId);
   const adapterAgentId = configuredAgentId ?? templateAgentId;
+  const contextProject = asRecord(ctx.context.project);
+  const routingVariables: Record<string, unknown> = {
+    project: {
+      id: nonEmpty(contextProject?.id) ?? nonEmpty(ctx.context.projectId),
+      name: nonEmpty(contextProject?.name),
+      metadata: asRecord(contextProject?.metadata),
+    },
+    paperclipAgentId: ctx.agent.id,
+    adapterAgentId,
+    issueId: wakePayload.issueId,
+    runId: ctx.runId,
+    wakeSource: nonEmpty(ctx.context.wakeSource),
+    wakeReason: wakePayload.wakeReason,
+  };
   const sessionKey =
     sessionKeyStrategy === "routing"
       ? resolveSessionKeyFromRouting({
@@ -1164,6 +1206,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           issueId: wakePayload.issueId,
           paperclipAgentId: ctx.agent.id,
           adapterAgentId,
+          routingVariables,
           fallback: {
             strategy: "issue",
             configuredSessionKey,

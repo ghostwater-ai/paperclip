@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Project } from "@paperclipai/shared";
@@ -42,6 +42,7 @@ export type ProjectConfigFieldKey =
   | "description"
   | "status"
   | "goals"
+  | "metadata"
   | "execution_workspace_enabled"
   | "execution_workspace_default_mode"
   | "execution_workspace_base_ref"
@@ -49,6 +50,18 @@ export type ProjectConfigFieldKey =
   | "execution_workspace_worktree_parent_dir"
   | "execution_workspace_provision_command"
   | "execution_workspace_teardown_command";
+
+const REPO_ONLY_CWD_SENTINEL = "/__paperclip_repo_only__";
+
+function asJsonObject(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function formatJsonObject(value: unknown): string {
+  const record = asJsonObject(value);
+  return record ? JSON.stringify(record, null, 2) : "";
+}
 
 function SaveIndicator({ state }: { state: ProjectFieldSaveState }) {
   if (state === "saving") {
@@ -224,6 +237,13 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
   const [workspaceCwd, setWorkspaceCwd] = useState("");
   const [workspaceRepoUrl, setWorkspaceRepoUrl] = useState("");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [metadataDraft, setMetadataDraft] = useState(() => formatJsonObject(project.metadata));
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMetadataDraft(formatJsonObject(project.metadata));
+    setMetadataError(null);
+  }, [project.metadata]);
 
   const commitField = (field: ProjectConfigFieldKey, data: Record<string, unknown>) => {
     if (onFieldUpdate) {
@@ -468,6 +488,28 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
     persistCodebase({ repoUrl: null });
   };
 
+  const updateMetadataDraft = (next: string) => {
+    setMetadataDraft(next);
+    const trimmed = next.trim();
+    if (!trimmed) {
+      setMetadataError(null);
+      commitField("metadata", { metadata: null });
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        setMetadataError(null);
+        commitField("metadata", { metadata: parsed });
+      } else {
+        setMetadataError("Metadata must be a JSON object.");
+      }
+    } catch {
+      setMetadataError("Metadata must be valid JSON.");
+    }
+  };
+
   return (
     <div>
       <div className="space-y-1 pb-4">
@@ -579,6 +621,33 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
                 )}
               </PopoverContent>
             </Popover>
+          )}
+        </PropertyRow>
+        <PropertyRow
+          label={<FieldLabel label="Metadata" state={fieldState("metadata")} />}
+          alignStart
+          valueClassName="space-y-1"
+        >
+          {onUpdate || onFieldUpdate ? (
+            <>
+              <textarea
+                className="w-full min-h-[120px] rounded border border-border bg-transparent px-2 py-1 text-xs font-mono outline-none"
+                value={metadataDraft}
+                onChange={(event) => updateMetadataDraft(event.target.value)}
+                placeholder={`{\n  "sessionKey": "project-session-1"\n}`}
+              />
+              {metadataError ? (
+                <div className="text-xs text-destructive">{metadataError}</div>
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  Free-form JSON object for project-level template variables.
+                </div>
+              )}
+            </>
+          ) : (
+            <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all">
+              {formatJsonObject(project.metadata) || "null"}
+            </pre>
           )}
         </PropertyRow>
         <PropertyRow label={<FieldLabel label="Created" state="idle" />}>

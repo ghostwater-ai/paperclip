@@ -62,6 +62,7 @@ export interface Project {
   color: string | null;
   pauseReason: PauseReason | null;
   pausedAt: Date | null;
+  metadata: Record<string, unknown> | null;
   executionWorkspacePolicy: ProjectExecutionWorkspacePolicy | null;
   codebase: ProjectCodebase;
   workspaces: ProjectWorkspace[];

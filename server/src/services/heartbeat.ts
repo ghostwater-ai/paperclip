@@ -1904,8 +1904,15 @@ export function heartbeatService(db: Db) {
     const contextProjectId = readNonEmptyString(context.projectId);
     const executionProjectId = issueContext?.projectId ?? contextProjectId;
     const projectExecutionWorkspacePolicy = executionProjectId
+    const executionProjectId = issueAssigneeConfig?.projectId ?? contextProjectId;
+    const executionProject = executionProjectId
       ? await db
-          .select({ executionWorkspacePolicy: projects.executionWorkspacePolicy })
+          .select({
+            id: projects.id,
+            name: projects.name,
+            metadata: projects.metadata,
+            executionWorkspacePolicy: projects.executionWorkspacePolicy,
+          })
           .from(projects)
           .where(and(eq(projects.id, executionProjectId), eq(projects.companyId, agent.companyId)))
           .then((rows) =>
@@ -1913,6 +1920,10 @@ export function heartbeatService(db: Db) {
               parseProjectExecutionWorkspacePolicy(rows[0]?.executionWorkspacePolicy),
               isolatedWorkspacesEnabled,
             ))
+          .then((rows) => rows[0] ?? null)
+      : null;
+    const projectExecutionWorkspacePolicy = executionProjectId
+      ? parseProjectExecutionWorkspacePolicy(executionProject?.executionWorkspacePolicy)
       : null;
     const taskSession = taskKey
       ? await getTaskSession(agent.companyId, agent.id, agent.adapterType, taskKey)
@@ -2168,6 +2179,18 @@ export function heartbeatService(db: Db) {
     }
     if (executionWorkspace.projectId && !readNonEmptyString(context.projectId)) {
       context.projectId = executionWorkspace.projectId;
+    }
+    if (executionProject) {
+      context.project = {
+        id: executionProject.id,
+        name: executionProject.name,
+        metadata:
+          typeof executionProject.metadata === "object" &&
+          executionProject.metadata !== null &&
+          !Array.isArray(executionProject.metadata)
+            ? (executionProject.metadata as Record<string, unknown>)
+            : null,
+      };
     }
     const runtimeSessionFallback = taskKey || resetTaskSession ? null : runtime.sessionId;
     let previousSessionDisplayId = truncateDisplayId(
