@@ -32,7 +32,14 @@ export function parseSessionKeyRoutingJson(text: string): {
     if (!Array.isArray(parsed)) {
       return { rules: [], error: "JSON must be an array of { pattern, sessionKey } objects." };
     }
-    return { rules: parseSessionKeyRouting(parsed), error: null };
+    const rules = parseSessionKeyRouting(parsed);
+    if (rules.length !== parsed.length) {
+      return {
+        rules,
+        error: "Every entry must include non-empty string fields: pattern and sessionKey.",
+      };
+    }
+    return { rules, error: null };
   } catch {
     return { rules: [], error: "Invalid JSON." };
   }

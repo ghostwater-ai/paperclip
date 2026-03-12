@@ -58,6 +58,14 @@ describe("session-key-routing helpers", () => {
       error: null,
     });
     expect(parseSessionKeyRoutingJson("{bad").error).toBe("Invalid JSON.");
+    expect(
+      parseSessionKeyRoutingJson(
+        '[{"pattern":"*:*","sessionKey":"paperclip:{{runId}}"},{"pattern":"","sessionKey":"x"}]',
+      ),
+    ).toEqual({
+      rules: [{ pattern: "*:*", sessionKey: "paperclip:{{runId}}" }],
+      error: "Every entry must include non-empty string fields: pattern and sessionKey.",
+    });
   });
 
   it("supports add, replace, reorder, and delete operations", () => {
