@@ -38,8 +38,7 @@ export const wakeReasons = [
 ];
 
 export const templateVariables = [
-  "paperclipAgentId",
-  "adapterAgentId",
+  "payloadTemplate.<key>",
   "issueId",
   "runId",
   "wakeSource",
@@ -175,7 +174,8 @@ export function RoutingRulesEditor({
                   <section>
                     <h4 className="font-medium mb-1">Template variables</h4>
                     <p className="text-xs text-muted-foreground mb-2">
-                      Use dot-path syntax for nested values (for example, <code>{"{{project.metadata.sessionKey}}"}</code>).
+                      Use dot-path syntax for nested values (for example, <code>{"{{payloadTemplate.agentId}}"}</code>{" "}
+                      and <code>{"{{project.metadata.sessionKey}}"}</code>).
                     </p>
                     <table className="w-full text-xs border border-border rounded-md overflow-hidden">
                       <tbody>
@@ -231,7 +231,7 @@ export function RoutingRulesEditor({
                     onCommit={(next) => onChange(replaceRule(rules, index, "sessionKey", next))}
                     immediate
                     className={inputClass}
-                    placeholder="paperclip:{{paperclipAgentId}}:{{issueId}}"
+                    placeholder="paperclip:{{payloadTemplate.agentId}}:{{issueId}}"
                   />
                 </div>
                 <div className="flex justify-end gap-2">
