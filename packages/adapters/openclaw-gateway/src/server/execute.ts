@@ -216,9 +216,12 @@ export function resolveSessionKeyFromRouting(input: {
   wakeReason: string | null;
   runId: string;
   issueId: string | null;
-  paperclipAgentId: string;
-  adapterAgentId: string | null;
-  routingVariables?: Record<string, unknown>;
+  payloadTemplate: Record<string, unknown> | null;
+  project: {
+    id: string | null;
+    name: string | null;
+    metadata: Record<string, unknown> | null;
+  };
   fallback: {
     strategy: SessionKeyStrategy;
     configuredSessionKey: string | null;
@@ -227,9 +230,13 @@ export function resolveSessionKeyFromRouting(input: {
   const wakeSource = input.wakeSource ?? "";
   const wakeReason = input.wakeReason ?? "";
   const key = `${wakeSource}:${wakeReason}`;
-  const variables: Record<string, unknown> = input.routingVariables ?? {
-    paperclipAgentId: input.paperclipAgentId,
-    adapterAgentId: input.adapterAgentId,
+  const variables: Record<string, unknown> = {
+    payloadTemplate: { ...(input.payloadTemplate ?? {}) },
+    project: {
+      id: input.project.id,
+      name: input.project.name,
+      metadata: input.project.metadata,
+    },
     issueId: input.issueId,
     runId: input.runId,
     wakeSource: input.wakeSource,
@@ -1181,22 +1188,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const configuredSessionKey = nonEmpty(ctx.config.sessionKey);
   const sessionKeyRouting = parseSessionKeyRouting(ctx.config.sessionKeyRouting);
   const configuredAgentId = nonEmpty(ctx.config.agentId);
-  const templateAgentId = nonEmpty(payloadTemplate.agentId);
-  const adapterAgentId = configuredAgentId ?? templateAgentId;
   const contextProject = asRecord(ctx.context.project);
-  const routingVariables: Record<string, unknown> = {
-    project: {
-      id: nonEmpty(contextProject?.id) ?? nonEmpty(ctx.context.projectId),
-      name: nonEmpty(contextProject?.name),
-      metadata: asRecord(contextProject?.metadata),
-    },
-    paperclipAgentId: ctx.agent.id,
-    adapterAgentId,
-    issueId: wakePayload.issueId,
-    runId: ctx.runId,
-    wakeSource: nonEmpty(ctx.context.wakeSource),
-    wakeReason: wakePayload.wakeReason,
-  };
   const sessionKey =
     sessionKeyStrategy === "routing"
       ? resolveSessionKeyFromRouting({
@@ -1205,9 +1197,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           wakeReason: wakePayload.wakeReason,
           runId: ctx.runId,
           issueId: wakePayload.issueId,
-          paperclipAgentId: ctx.agent.id,
-          adapterAgentId,
-          routingVariables,
+          payloadTemplate,
+          project: {
+            id: nonEmpty(contextProject?.id) ?? nonEmpty(ctx.context.projectId),
+            name: nonEmpty(contextProject?.name),
+            metadata: asRecord(contextProject?.metadata),
+          },
           fallback: {
             strategy: "issue",
             configuredSessionKey,
