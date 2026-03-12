@@ -409,13 +409,14 @@ describe("openclaw gateway routing helpers", () => {
   });
 
   it("interpolates template variables with mustache and dollar styles", () => {
-    const text = interpolateTemplate("session:{{paperclipAgentId}}:${runId}:${issueId}:${adapterAgentId}", {
-      paperclipAgentId: "agent-1",
+    const text = interpolateTemplate("session:{{payloadTemplate.agentId}}:${runId}:${issueId}", {
+      payloadTemplate: {
+        agentId: "agent-1",
+      },
       runId: "run-1",
       issueId: "issue-1",
-      adapterAgentId: null,
     });
-    expect(text).toBe("session:agent-1:run-1:issue-1:");
+    expect(text).toBe("session:agent-1:run-1:issue-1");
   });
 
   it("resolves dot-path template variables", () => {
@@ -460,8 +461,14 @@ describe("openclaw gateway routing helpers", () => {
       wakeReason: "issue_assigned",
       runId: "run-1",
       issueId: "issue-1",
-      paperclipAgentId: "paperclip-agent-1",
-      adapterAgentId: "gateway-agent-1",
+      payloadTemplate: {
+        agentId: "gateway-agent-1",
+      },
+      project: {
+        id: null,
+        name: null,
+        metadata: null,
+      },
       fallback: {
         strategy: "run",
         configuredSessionKey: "fallback-session",
@@ -471,39 +478,99 @@ describe("openclaw gateway routing helpers", () => {
     expect(result).toBe("issue:issue-1");
   });
 
-  it("treats flat mustache vars as known when key exists with null value", () => {
+  it("resolves payloadTemplate dot-path variables", () => {
     const result = resolveSessionKeyFromRouting({
       routingRules: [
-        { pattern: "assignment:*", sessionKey: "route:{{adapterAgentId}}|{{issueId}}" },
+        { pattern: "assignment:*", sessionKey: "route:{{payloadTemplate.agentId}}|{{issueId}}" },
         { pattern: "assignment:*", sessionKey: "route:fallback" },
       ],
       wakeSource: "assignment",
       wakeReason: "issue_assigned",
       runId: "run-1",
       issueId: "issue-1",
-      paperclipAgentId: "paperclip-agent-1",
-      adapterAgentId: null,
+      payloadTemplate: {
+        agentId: "main",
+      },
+      project: {
+        id: null,
+        name: null,
+        metadata: null,
+      },
       fallback: {
         strategy: "fixed",
         configuredSessionKey: "fallback-session",
       },
     });
 
-    expect(result).toBe("route:|issue-1");
+    expect(result).toBe("route:main|issue-1");
+  });
+
+  it("handles null payloadTemplate and continues with flat system variables", () => {
+    const result = resolveSessionKeyFromRouting({
+      routingRules: [
+        { pattern: "assignment:*", sessionKey: "route:{{payloadTemplate.agentId}}" },
+        { pattern: "assignment:*", sessionKey: "route:{{wakeSource}}|{{issueId}}" },
+      ],
+      wakeSource: "assignment",
+      wakeReason: "issue_assigned",
+      runId: "run-1",
+      issueId: "issue-1",
+      payloadTemplate: null,
+      project: {
+        id: null,
+        name: null,
+        metadata: null,
+      },
+      fallback: {
+        strategy: "fixed",
+        configuredSessionKey: "fallback-session",
+      },
+    });
+
+    expect(result).toBe("route:assignment|issue-1");
+  });
+
+  it("handles empty payloadTemplate and continues with flat system variables", () => {
+    const result = resolveSessionKeyFromRouting({
+      routingRules: [
+        { pattern: "assignment:*", sessionKey: "route:{{payloadTemplate.agentId}}" },
+        { pattern: "assignment:*", sessionKey: "route:{{runId}}|{{issueId}}" },
+      ],
+      wakeSource: "assignment",
+      wakeReason: "issue_assigned",
+      runId: "run-1",
+      issueId: "issue-1",
+      payloadTemplate: {},
+      project: {
+        id: null,
+        name: null,
+        metadata: null,
+      },
+      fallback: {
+        strategy: "fixed",
+        configuredSessionKey: "fallback-session",
+      },
+    });
+
+    expect(result).toBe("route:run-1|issue-1");
   });
 
   it("does not gate routing on dollar-template variables", () => {
     const result = resolveSessionKeyFromRouting({
       routingRules: [
-        { pattern: "assignment:*", sessionKey: "route:${adapterAgentId}|{{issueId}}" },
+        { pattern: "assignment:*", sessionKey: "route:${payloadTemplate.agentId}|{{issueId}}" },
         { pattern: "assignment:*", sessionKey: "route:fallback" },
       ],
       wakeSource: "assignment",
       wakeReason: "issue_assigned",
       runId: "run-1",
       issueId: "issue-1",
-      paperclipAgentId: "paperclip-agent-1",
-      adapterAgentId: null,
+      payloadTemplate: {},
+      project: {
+        id: null,
+        name: null,
+        metadata: null,
+      },
       fallback: {
         strategy: "fixed",
         configuredSessionKey: "fallback-session",
@@ -520,8 +587,14 @@ describe("openclaw gateway routing helpers", () => {
       wakeReason: "issue_assigned",
       runId: "run-1",
       issueId: "issue-1",
-      paperclipAgentId: "paperclip-agent-1",
-      adapterAgentId: "gateway-agent-1",
+      payloadTemplate: {
+        agentId: "gateway-agent-1",
+      },
+      project: {
+        id: null,
+        name: null,
+        metadata: null,
+      },
       fallback: {
         strategy: "fixed",
         configuredSessionKey: "fallback-session",
@@ -541,22 +614,15 @@ describe("openclaw gateway routing helpers", () => {
       wakeReason: "issue_assigned",
       runId: "run-1",
       issueId: "issue-1",
-      paperclipAgentId: "paperclip-agent-1",
-      adapterAgentId: "gateway-agent-1",
-      routingVariables: {
-        project: {
-          id: "project-1",
-          name: "Core Platform",
-          metadata: {
-            sessionKey: "project-session-1",
-          },
+      payloadTemplate: {
+        agentId: "gateway-agent-1",
+      },
+      project: {
+        id: "project-1",
+        name: "Core Platform",
+        metadata: {
+          sessionKey: "project-session-1",
         },
-        paperclipAgentId: "paperclip-agent-1",
-        adapterAgentId: "gateway-agent-1",
-        issueId: "issue-1",
-        runId: "run-1",
-        wakeSource: "assignment",
-        wakeReason: "issue_assigned",
       },
       fallback: {
         strategy: "fixed",
@@ -742,10 +808,13 @@ describe("openclaw gateway adapter execute", () => {
             sessionKeyRouting: [
               {
                 pattern: "assignment:*",
-                sessionKey: "route:{{project.metadata.sessionKey}}:{{paperclipAgentId}}:{{issueId}}",
+                sessionKey: "route:{{project.metadata.sessionKey}}:{{payloadTemplate.agentId}}:{{issueId}}",
               },
               { pattern: "*:*", sessionKey: "route:default" },
             ],
+            payloadTemplate: {
+              agentId: "agent-123",
+            },
             waitTimeoutMs: 2000,
           },
           {
