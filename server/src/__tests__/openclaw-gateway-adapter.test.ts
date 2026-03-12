@@ -471,6 +471,48 @@ describe("openclaw gateway routing helpers", () => {
     expect(result).toBe("issue:issue-1");
   });
 
+  it("treats flat mustache vars as known when key exists with null value", () => {
+    const result = resolveSessionKeyFromRouting({
+      routingRules: [
+        { pattern: "assignment:*", sessionKey: "route:{{adapterAgentId}}|{{issueId}}" },
+        { pattern: "assignment:*", sessionKey: "route:fallback" },
+      ],
+      wakeSource: "assignment",
+      wakeReason: "issue_assigned",
+      runId: "run-1",
+      issueId: "issue-1",
+      paperclipAgentId: "paperclip-agent-1",
+      adapterAgentId: null,
+      fallback: {
+        strategy: "fixed",
+        configuredSessionKey: "fallback-session",
+      },
+    });
+
+    expect(result).toBe("route:|issue-1");
+  });
+
+  it("does not gate routing on dollar-template variables", () => {
+    const result = resolveSessionKeyFromRouting({
+      routingRules: [
+        { pattern: "assignment:*", sessionKey: "route:${adapterAgentId}|{{issueId}}" },
+        { pattern: "assignment:*", sessionKey: "route:fallback" },
+      ],
+      wakeSource: "assignment",
+      wakeReason: "issue_assigned",
+      runId: "run-1",
+      issueId: "issue-1",
+      paperclipAgentId: "paperclip-agent-1",
+      adapterAgentId: null,
+      fallback: {
+        strategy: "fixed",
+        configuredSessionKey: "fallback-session",
+      },
+    });
+
+    expect(result).toBe("route:|issue-1");
+  });
+
   it("falls back to legacy strategy behavior when no rule matches", () => {
     const result = resolveSessionKeyFromRouting({
       routingRules: [{ pattern: "timer:*", sessionKey: "timer:${runId}" }],
