@@ -3,6 +3,11 @@ import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 import { execute, testEnvironment } from "@paperclipai/adapter-openclaw-gateway/server";
 import {
+  interpolateTemplate,
+  matchPattern,
+  resolveSessionKeyFromRouting,
+} from "../../../packages/adapters/openclaw-gateway/src/server/execute";
+import {
   buildOpenClawGatewayConfig,
   parseOpenClawGatewayStdoutLine,
 } from "@paperclipai/adapter-openclaw-gateway/ui";
@@ -395,6 +400,63 @@ describe("openclaw gateway ui stdout parser", () => {
   });
 });
 
+describe("openclaw gateway routing helpers", () => {
+  it("matches glob patterns", () => {
+    expect(matchPattern("timer:*", "timer:heartbeat_timer")).toBe(true);
+    expect(matchPattern("*:issue_*", "assignment:issue_assigned")).toBe(true);
+    expect(matchPattern("assignment:issue_*", "timer:issue_assigned")).toBe(false);
+  });
+
+  it("interpolates template variables with mustache and dollar styles", () => {
+    const text = interpolateTemplate("session:{{paperclipAgentId}}:${runId}:${issueId}:${adapterAgentId}", {
+      paperclipAgentId: "agent-1",
+      runId: "run-1",
+      issueId: "issue-1",
+      adapterAgentId: null,
+    });
+    expect(text).toBe("session:agent-1:run-1:issue-1:");
+  });
+
+  it("resolves first matching routing rule and interpolates values", () => {
+    const result = resolveSessionKeyFromRouting({
+      routingRules: [
+        { pattern: "*:issue_*", sessionKey: "issue:${issueId}" },
+        { pattern: "timer:*", sessionKey: "timer:${runId}" },
+      ],
+      wakeSource: "assignment",
+      wakeReason: "issue_assigned",
+      runId: "run-1",
+      issueId: "issue-1",
+      paperclipAgentId: "paperclip-agent-1",
+      adapterAgentId: "gateway-agent-1",
+      fallback: {
+        strategy: "run",
+        configuredSessionKey: "fallback-session",
+      },
+    });
+
+    expect(result).toBe("issue:issue-1");
+  });
+
+  it("falls back to legacy strategy behavior when no rule matches", () => {
+    const result = resolveSessionKeyFromRouting({
+      routingRules: [{ pattern: "timer:*", sessionKey: "timer:${runId}" }],
+      wakeSource: "on_demand",
+      wakeReason: "issue_assigned",
+      runId: "run-1",
+      issueId: "issue-1",
+      paperclipAgentId: "paperclip-agent-1",
+      adapterAgentId: "gateway-agent-1",
+      fallback: {
+        strategy: "fixed",
+        configuredSessionKey: "fallback-session",
+      },
+    });
+
+    expect(result).toBe("fallback-session");
+  });
+});
+
 describe("openclaw gateway adapter execute", () => {
   it("runs connect -> agent -> agent.wait and forwards wake payload", async () => {
     const gateway = await createMockGatewayServer();
@@ -549,6 +611,66 @@ describe("openclaw gateway adapter execute", () => {
       );
       expect(logs.some((entry) => entry.includes("auto-approved pairing request"))).toBe(true);
       expect(gateway.getAgentPayload()).toBeTruthy();
+    } finally {
+      await gateway.close();
+    }
+  });
+
+  it("uses routing strategy session key when configured", async () => {
+    const gateway = await createMockGatewayServer();
+
+    try {
+      const result = await execute(
+        buildContext(
+          {
+            url: gateway.url,
+            headers: {
+              "x-openclaw-token": "gateway-token",
+            },
+            sessionKeyStrategy: "routing",
+            sessionKeyRouting: [
+              { pattern: "assignment:*", sessionKey: "route:{{paperclipAgentId}}:{{issueId}}" },
+              { pattern: "*:*", sessionKey: "route:default" },
+            ],
+            waitTimeoutMs: 2000,
+          },
+          {
+            context: {
+              taskId: "task-123",
+              issueId: "issue-123",
+              wakeSource: "assignment",
+              wakeReason: "issue_assigned",
+              issueIds: ["issue-123"],
+            },
+          },
+        ),
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(gateway.getAgentPayload()?.sessionKey).toBe("route:agent-123:issue-123");
+    } finally {
+      await gateway.close();
+    }
+  });
+
+  it("keeps legacy session key behavior when strategy is not routing", async () => {
+    const gateway = await createMockGatewayServer();
+
+    try {
+      const result = await execute(
+        buildContext({
+          url: gateway.url,
+          headers: {
+            "x-openclaw-token": "gateway-token",
+          },
+          sessionKeyStrategy: "run",
+          sessionKeyRouting: [{ pattern: "*:*", sessionKey: "route:{{runId}}" }],
+          waitTimeoutMs: 2000,
+        }),
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(gateway.getAgentPayload()?.sessionKey).toBe("paperclip:run:run-123");
     } finally {
       await gateway.close();
     }

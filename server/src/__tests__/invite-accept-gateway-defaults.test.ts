@@ -116,4 +116,31 @@ describe("normalizeAgentDefaultsForJoin (openclaw_gateway)", () => {
     expect(normalized.normalized?.disableDeviceAuth).toBe(true);
     expect(normalized.normalized?.devicePrivateKeyPem).toBeUndefined();
   });
+
+  it("allows routing strategy and passes through valid sessionKeyRouting rules", () => {
+    const normalized = normalizeAgentDefaultsForJoin({
+      adapterType: "openclaw_gateway",
+      defaultsPayload: {
+        url: "ws://127.0.0.1:18789",
+        headers: {
+          "x-openclaw-token": "gateway-token-1234567890",
+        },
+        sessionKeyStrategy: "routing",
+        sessionKeyRouting: [
+          { pattern: " assignment:* ", sessionKey: " route:{{issueId}} " },
+          { pattern: "", sessionKey: "x" },
+        ],
+      },
+      deploymentMode: "authenticated",
+      deploymentExposure: "private",
+      bindHost: "127.0.0.1",
+      allowedHostnames: [],
+    });
+
+    expect(normalized.fatalErrors).toEqual([]);
+    expect(normalized.normalized?.sessionKeyStrategy).toBe("routing");
+    expect(normalized.normalized?.sessionKeyRouting).toEqual([
+      { pattern: "assignment:*", sessionKey: "route:{{issueId}}" },
+    ]);
+  });
 });
