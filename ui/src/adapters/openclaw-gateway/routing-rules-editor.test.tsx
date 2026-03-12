@@ -148,8 +148,7 @@ describe("RoutingRulesEditor", () => {
     expect(wakeReasons).toContain("issue_assigned");
     expect(wakeReasons).toContain("stale_checkout_run");
     expect(templateVariables).toEqual([
-      "paperclipAgentId",
-      "adapterAgentId",
+      "payloadTemplate.<key>",
       "issueId",
       "runId",
       "wakeSource",
