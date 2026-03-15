@@ -695,8 +695,40 @@ describe("openclaw gateway adapter execute", () => {
       expect(String(payload?.message ?? "")).toContain("wake now");
       expect(String(payload?.message ?? "")).toContain("PAPERCLIP_RUN_ID=run-123");
       expect(String(payload?.message ?? "")).toContain("PAPERCLIP_TASK_ID=task-123");
+      expect(String(payload?.message ?? "")).toContain(
+        "~/.openclaw/workspace/paperclip-claimed-api-key.json",
+      );
 
       expect(logs.some((entry) => entry.includes("[openclaw-gateway:event] run=run-123 stream=assistant"))).toBe(true);
+    } finally {
+      await gateway.close();
+    }
+  });
+
+  it("uses configured apiKeyPath in wake text", async () => {
+    const gateway = await createMockGatewayServer();
+
+    try {
+      const result = await execute(
+        buildContext({
+          url: gateway.url,
+          headers: {
+            "x-openclaw-token": "gateway-token",
+          },
+          apiKeyPath: "~/custom/openclaw/paperclip-key.json",
+          waitTimeoutMs: 2000,
+        }),
+      );
+
+      expect(result.exitCode).toBe(0);
+      const payload = gateway.getAgentPayload();
+      expect(payload).toBeTruthy();
+      expect(String(payload?.message ?? "")).toContain(
+        "PAPERCLIP_API_KEY=<token from ~/custom/openclaw/paperclip-key.json>",
+      );
+      expect(String(payload?.message ?? "")).toContain(
+        "Load PAPERCLIP_API_KEY from ~/custom/openclaw/paperclip-key.json",
+      );
     } finally {
       await gateway.close();
     }
