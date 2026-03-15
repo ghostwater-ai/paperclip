@@ -111,15 +111,19 @@ describe("PATCH /api/agents/:id config merge behavior", () => {
     );
   });
 
-  it("replaces config when full objects are provided", async () => {
+  it("applies full config objects when all fields are provided", async () => {
     const res = await request(createApp())
       .patch("/api/agents/11111111-1111-4111-8111-111111111111")
       .send({
         adapterConfig: {
-          only: "adapter-new",
+          preserved: "adapter-updated",
+          overridden: "adapter-overridden",
+          clearMe: "adapter-reset",
         },
         runtimeConfig: {
-          only: "runtime-new",
+          retained: "runtime-updated",
+          changed: "runtime-overridden",
+          clearRuntime: "runtime-reset",
         },
       });
 
@@ -127,8 +131,16 @@ describe("PATCH /api/agents/:id config merge behavior", () => {
     expect(mockAgentService.update).toHaveBeenCalledWith(
       "11111111-1111-4111-8111-111111111111",
       expect.objectContaining({
-        adapterConfig: { only: "adapter-new" },
-        runtimeConfig: { only: "runtime-new" },
+        adapterConfig: {
+          preserved: "adapter-updated",
+          overridden: "adapter-overridden",
+          clearMe: "adapter-reset",
+        },
+        runtimeConfig: {
+          retained: "runtime-updated",
+          changed: "runtime-overridden",
+          clearRuntime: "runtime-reset",
+        },
       }),
       expect.anything(),
     );
