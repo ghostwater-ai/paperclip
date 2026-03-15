@@ -1701,7 +1701,19 @@ export function agentRoutes(db: Db) {
       if (changingInstructionsPath) {
         await assertCanManageInstructionsPath(req, existing);
       }
-      patchData.adapterConfig = adapterConfig;
+      patchData.adapterConfig = {
+        ...(asRecord(existing.adapterConfig) ?? {}),
+        ...adapterConfig,
+      };
+    }
+    if (Object.prototype.hasOwnProperty.call(patchData, "runtimeConfig")) {
+      const runtimeConfig = asRecord(patchData.runtimeConfig);
+      if (runtimeConfig) {
+        patchData.runtimeConfig = {
+          ...(asRecord(existing.runtimeConfig) ?? {}),
+          ...runtimeConfig,
+        };
+      }
     }
 
     const requestedAdapterType =
