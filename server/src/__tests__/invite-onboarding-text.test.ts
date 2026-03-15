@@ -113,4 +113,36 @@ describe("buildInviteOnboardingTextDocument", () => {
     expect(text).toContain("Message from inviter");
     expect(text).toContain("prioritize flaky test triage first");
   });
+
+  it("uses configured apiKeyPath from invite defaults when provided", () => {
+    const req = buildReq("localhost:3100");
+    const invite = {
+      id: "invite-4",
+      companyId: "company-1",
+      inviteType: "company_join",
+      allowedJoinTypes: "agent",
+      tokenHash: "hash",
+      defaultsPayload: {
+        agentDefaultsPayload: {
+          apiKeyPath: "~/agent-one/paperclip-claimed-api-key.json",
+        },
+      },
+      expiresAt: new Date("2026-03-05T00:00:00.000Z"),
+      invitedByUserId: null,
+      revokedAt: null,
+      acceptedAt: null,
+      createdAt: new Date("2026-03-04T00:00:00.000Z"),
+      updatedAt: new Date("2026-03-04T00:00:00.000Z"),
+    } as const;
+
+    const text = buildInviteOnboardingTextDocument(req, "token-999", invite as any, {
+      deploymentMode: "local_trusted",
+      deploymentExposure: "private",
+      bindHost: "127.0.0.1",
+      allowedHostnames: [],
+    });
+
+    expect(text).toContain("~/agent-one/paperclip-claimed-api-key.json");
+    expect(text).not.toContain("~/.openclaw/workspace/paperclip-claimed-api-key.json");
+  });
 });

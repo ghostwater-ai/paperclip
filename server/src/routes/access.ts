@@ -59,6 +59,8 @@ const INVITE_TOKEN_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const INVITE_TOKEN_SUFFIX_LENGTH = 8;
 const INVITE_TOKEN_MAX_RETRIES = 5;
 const COMPANY_INVITE_TTL_MS = 10 * 60 * 1000;
+const DEFAULT_CLAIMED_API_KEY_PATH =
+  "~/.openclaw/workspace/paperclip-claimed-api-key.json";
 
 function createInviteToken() {
   const bytes = randomBytes(INVITE_TOKEN_SUFFIX_LENGTH);
@@ -202,6 +204,19 @@ function listAvailableSkills(): AvailableSkill[] {
 
   skills.sort((a, b) => a.name.localeCompare(b.name));
   return skills;
+function resolveClaimedApiKeyPathFromInviteDefaults(defaultsPayload: unknown) {
+  if (!isPlainObject(defaultsPayload)) return DEFAULT_CLAIMED_API_KEY_PATH;
+  const directPath = nonEmptyTrimmedString(
+    (defaultsPayload as Record<string, unknown>).apiKeyPath
+  );
+  if (directPath) return directPath;
+  const nestedDefaults = (defaultsPayload as Record<string, unknown>)
+    .agentDefaultsPayload;
+  if (!isPlainObject(nestedDefaults)) return DEFAULT_CLAIMED_API_KEY_PATH;
+  return (
+    nonEmptyTrimmedString((nestedDefaults as Record<string, unknown>).apiKeyPath) ??
+    DEFAULT_CLAIMED_API_KEY_PATH
+  );
 }
 
 function toJoinRequestResponse(row: typeof joinRequests.$inferSelect) {
@@ -1014,6 +1029,9 @@ function buildInviteOnboardingManifest(
     allowedHostnames: string[];
   }
 ) {
+  const claimedApiKeyPath = resolveClaimedApiKeyPathFromInviteDefaults(
+    invite.defaultsPayload
+  );
   const baseUrl = requestBaseUrl(req);
   const skillPath = "/api/skills/paperclip";
   const skillUrl = baseUrl ? `${baseUrl}${skillPath}` : skillPath;
@@ -1042,8 +1060,9 @@ function buildInviteOnboardingManifest(
     invite: toInviteSummaryResponse(req, token, invite),
     onboarding: {
       instructions:
-        "Join as an OpenClaw Gateway agent, save your one-time claim secret, wait for board approval, then claim your API key. Save the claim response token to ~/.openclaw/workspace/paperclip-claimed-api-key.json and load PAPERCLIP_API_KEY from that file before starting heartbeat loops. You MUST submit adapterType='openclaw_gateway', set agentDefaultsPayload.url to your ws:// or wss:// OpenClaw gateway endpoint, and include agentDefaultsPayload.headers.x-openclaw-token (or legacy x-openclaw-auth).",
+        `Join as an OpenClaw Gateway agent, save your one-time claim secret, wait for board approval, then claim your API key. Save the claim response token to ${claimedApiKeyPath} and load PAPERCLIP_API_KEY from that file before starting heartbeat loops. You MUST submit adapterType='openclaw_gateway', set agentDefaultsPayload.url to your ws:// or wss:// OpenClaw gateway endpoint, and include agentDefaultsPayload.headers.x-openclaw-token (or legacy x-openclaw-auth).`,
       inviteMessage: extractInviteMessage(invite),
+      apiKeyPath: claimedApiKeyPath,
       recommendedAdapterType: "openclaw_gateway",
       requiredFields: {
         requestType: "agent",
@@ -1108,6 +1127,7 @@ export function buildInviteOnboardingTextDocument(
   const manifest = buildInviteOnboardingManifest(req, token, invite, opts);
   const onboarding = manifest.onboarding as {
     inviteMessage?: string | null;
+    apiKeyPath?: string;
     registrationEndpoint: { method: string; path: string; url: string };
     claimEndpointTemplate: { method: string; path: string };
     textInstructions: { path: string; url: string };
@@ -1122,6 +1142,8 @@ export function buildInviteOnboardingTextDocument(
   const diagnostics = Array.isArray(onboarding.connectivity?.diagnostics)
     ? onboarding.connectivity.diagnostics
     : [];
+  const claimedApiKeyPath =
+    nonEmptyTrimmedString(onboarding.apiKeyPath) ?? DEFAULT_CLAIMED_API_KEY_PATH;
 
   const lines: string[] = [];
   const appendBlock = (block: string) => {
@@ -1245,8 +1267,8 @@ export function buildInviteOnboardingTextDocument(
 
     On successful claim, save the full JSON response to:
 
-    - ~/.openclaw/workspace/paperclip-claimed-api-key.json
-    chmod 600 ~/.openclaw/workspace/paperclip-claimed-api-key.json
+    - ${claimedApiKeyPath}
+    chmod 600 ${claimedApiKeyPath}
 
     And set the PAPERCLIP_API_KEY and PAPERCLIP_API_URL in your environment variables as specified here:
     https://docs.openclaw.ai/help/environment
