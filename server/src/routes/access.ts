@@ -211,6 +211,8 @@ function listAvailableSkills(): AvailableSkill[] {
 
   skills.sort((a, b) => a.name.localeCompare(b.name));
   return skills;
+}
+
 function resolveClaimedApiKeyPathFromInviteDefaults(defaultsPayload: unknown) {
   if (!isPlainObject(defaultsPayload)) return DEFAULT_CLAIMED_API_KEY_PATH;
   const directPath = nonEmptyTrimmedString(
