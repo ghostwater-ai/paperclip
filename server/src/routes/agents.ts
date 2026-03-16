@@ -1115,6 +1115,10 @@ export function agentRoutes(db: Db) {
     }
     if (Object.prototype.hasOwnProperty.call(patchData, "runtimeConfig")) {
       const runtimeConfig = asRecord(patchData.runtimeConfig);
+      if (patchData.runtimeConfig !== undefined && !runtimeConfig) {
+        res.status(422).json({ error: "runtimeConfig must be an object" });
+        return;
+      }
       if (runtimeConfig) {
         patchData.runtimeConfig = {
           ...(asRecord(existing.runtimeConfig) ?? {}),

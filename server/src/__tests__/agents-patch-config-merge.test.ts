@@ -172,4 +172,16 @@ describe("PATCH /api/agents/:id config merge behavior", () => {
       expect.anything(),
     );
   });
+
+  it("rejects non-object runtimeConfig before reaching update", async () => {
+    const res = await request(createApp())
+      .patch("/api/agents/11111111-1111-4111-8111-111111111111")
+      .send({ runtimeConfig: "not-an-object" });
+
+    // Schema validation may reject with 400, or our guard returns 422.
+    // Either way, update must not be called with invalid data.
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+    expect(mockAgentService.update).not.toHaveBeenCalled();
+  });
 });

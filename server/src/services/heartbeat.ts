@@ -1670,8 +1670,6 @@ export function heartbeatService(db: Db) {
       : null;
     const contextProjectId = readNonEmptyString(context.projectId);
     const executionProjectId = issueContext?.projectId ?? contextProjectId;
-    const projectExecutionWorkspacePolicy = executionProjectId
-    const executionProjectId = issueAssigneeConfig?.projectId ?? contextProjectId;
     const executionProject = executionProjectId
       ? await db
           .select({
@@ -1682,15 +1680,13 @@ export function heartbeatService(db: Db) {
           })
           .from(projects)
           .where(and(eq(projects.id, executionProjectId), eq(projects.companyId, agent.companyId)))
-          .then((rows) =>
-            gateProjectExecutionWorkspacePolicy(
-              parseProjectExecutionWorkspacePolicy(rows[0]?.executionWorkspacePolicy),
-              isolatedWorkspacesEnabled,
-            ))
           .then((rows) => rows[0] ?? null)
       : null;
-    const projectExecutionWorkspacePolicy = executionProjectId
-      ? parseProjectExecutionWorkspacePolicy(executionProject?.executionWorkspacePolicy)
+    const projectExecutionWorkspacePolicy = executionProject
+      ? gateProjectExecutionWorkspacePolicy(
+          parseProjectExecutionWorkspacePolicy(executionProject.executionWorkspacePolicy),
+          isolatedWorkspacesEnabled,
+        )
       : null;
     const taskSession = taskKey
       ? await getTaskSession(agent.companyId, agent.id, agent.adapterType, taskKey)
