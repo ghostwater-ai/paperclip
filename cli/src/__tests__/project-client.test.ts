@@ -20,7 +20,7 @@ function createTempJsonFile(contents: string): string {
 }
 
 function makeProject(overrides: Partial<Project> = {}): Project {
-  return {
+  const project: Project = {
     id: "project-1",
     companyId: "company-1",
     urlKey: "project-1",
@@ -33,14 +33,32 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     leadAgentId: null,
     targetDate: null,
     color: null,
+    pauseReason: null,
+    pausedAt: null,
     metadata: null,
     executionWorkspacePolicy: null,
+    codebase: {
+      workspaceId: null,
+      repoUrl: null,
+      repoRef: null,
+      defaultRef: null,
+      repoName: null,
+      localFolder: null,
+      managedFolder: "/tmp/project-1",
+      effectiveLocalFolder: "/tmp/project-1",
+      origin: "local_folder",
+    },
     workspaces: [],
     primaryWorkspace: null,
     archivedAt: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides,
+  };
+  return {
+    ...project,
+    pauseReason: project.pauseReason ?? null,
+    pausedAt: project.pausedAt ?? null,
   };
 }
 

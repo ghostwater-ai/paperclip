@@ -8,7 +8,9 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  boolean,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { agents } from "./agents.js";
 import { projects } from "./projects.js";
 import { goals } from "./goals.js";
@@ -42,6 +44,11 @@ export const issues = pgTable(
     identifier: text("identifier"),
     requestDepth: integer("request_depth").notNull().default(0),
     billingCode: text("billing_code"),
+    schedule: text("schedule"),
+    scheduleTimezone: text("schedule_timezone").default("UTC"),
+    scheduleNextRunAt: timestamp("schedule_next_run_at", { withTimezone: true }),
+    scheduleEnabled: boolean("schedule_enabled").notNull().default(true),
+    isTemplate: boolean("is_template").notNull().default(false),
     assigneeAdapterOverrides: jsonb("assignee_adapter_overrides").$type<Record<string, unknown>>(),
     executionWorkspaceId: uuid("execution_workspace_id")
       .references((): AnyPgColumn => executionWorkspaces.id, { onDelete: "set null" }),
@@ -71,5 +78,8 @@ export const issues = pgTable(
     projectWorkspaceIdx: index("issues_company_project_workspace_idx").on(table.companyId, table.projectWorkspaceId),
     executionWorkspaceIdx: index("issues_company_execution_workspace_idx").on(table.companyId, table.executionWorkspaceId),
     identifierIdx: uniqueIndex("issues_identifier_idx").on(table.identifier),
+    dueTemplatesIdx: index("issues_due_templates_idx")
+      .on(table.scheduleNextRunAt)
+      .where(sql`${table.isTemplate} = true AND ${table.scheduleEnabled} = true AND ${table.scheduleNextRunAt} <= now()`),
   }),
 );
