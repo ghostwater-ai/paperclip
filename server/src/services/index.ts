@@ -13,6 +13,7 @@ export { secretService } from "./secrets.js";
 export { costService } from "./costs.js";
 export { financeService } from "./finance.js";
 export { heartbeatService } from "./heartbeat.js";
+export { tickScheduledTasks, type TickScheduledTasksResult } from "./scheduled-tasks.js";
 export { dashboardService } from "./dashboard.js";
 export { sidebarBadgeService } from "./sidebar-badges.js";
 export { accessService } from "./access.js";

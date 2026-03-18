@@ -170,7 +170,7 @@ function timeZoneParts(instant: Date, timeZone: string) {
   };
 }
 
-function nextCronTickForTimeZone(expression: string, after: Date, timeZone: string): Date | null {
+export function nextCronTickForTimeZone(expression: string, after: Date, timeZone: string): Date | null {
   const parsed = parseCron(expression);
   if (timeZone === "UTC") {
     return nextCronTick(parsed, after);
