@@ -12,6 +12,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Textarea } from "./ui/textarea";
+import { Switch } from "./ui/switch";
 import { useCompany } from "@/context/CompanyContext";
 import { useToast } from "@/context/ToastContext";
 import { queryKeys } from "@/lib/queryKeys";
@@ -64,35 +65,6 @@ function getNextRun(schedule: string | null, scheduleNextRunAt: Date | null): st
   return "Calculating...";
 }
 
-function ScheduleToggle({
-  enabled,
-  onChange,
-  disabled,
-}: {
-  enabled: boolean;
-  onChange: (enabled: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      className={cn(
-        "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-        enabled ? "bg-green-600" : "bg-muted",
-        disabled && "opacity-50 cursor-not-allowed"
-      )}
-      onClick={() => !disabled && onChange(!enabled)}
-      disabled={disabled}
-      aria-label={enabled ? "Disable schedule" : "Enable schedule"}
-    >
-      <span
-        className={cn(
-          "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
-          enabled ? "translate-x-4.5" : "translate-x-0.5"
-        )}
-      />
-    </button>
-  );
-}
 
 export function SchedulesList({
   schedules,
@@ -235,9 +207,9 @@ export function SchedulesList({
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <ScheduleToggle
-                        enabled={schedule.scheduleEnabled}
-                        onChange={(enabled) =>
+                      <Switch
+                        checked={schedule.scheduleEnabled}
+                        onCheckedChange={(enabled) =>
                           updateSchedule.mutate({ id: schedule.id, data: { scheduleEnabled: enabled } })
                         }
                         disabled={updateSchedule.isPending}
@@ -397,7 +369,7 @@ function CreateScheduleDialog({
 
           <div className="flex items-center justify-between">
             <Label htmlFor="enabled">Enable schedule immediately</Label>
-            <ScheduleToggle enabled={enabled} onChange={setEnabled} />
+            <Switch checked={enabled} onCheckedChange={setEnabled} />
           </div>
 
           <div className="flex justify-end gap-2 pt-4">

@@ -54,8 +54,9 @@ vi.mock("../context/CompanyContext", () => ({
   useCompany: () => ({
     selectedCompanyId: "company-1",
     companyPrefix: "acme",
-    companies: [{ id: "company-1", urlKey: "acme" }],
+    companies: [{ id: "company-1", urlKey: "acme", issuePrefix: "ACME" }],
     selectCompany: vi.fn(),
+    setSelectedCompanyId: vi.fn(),
   }),
 }));
 
@@ -73,6 +74,20 @@ vi.mock("../context/BreadcrumbContext", () => ({
   }),
 }));
 
+vi.mock("../context/SidebarContext", () => ({
+  useSidebar: () => ({
+    isCollapsed: false,
+    toggleSidebar: vi.fn(),
+  }),
+}));
+
+vi.mock("../context/DialogContext", () => ({
+  useDialog: () => ({
+    openDialog: vi.fn(),
+    closeDialog: vi.fn(),
+  }),
+}));
+
 vi.mock("../plugins/slots", () => ({
   usePluginSlots: () => ({ slots: [], isLoading: false }),
   PluginSlotOutlet: () => null,
@@ -84,6 +99,16 @@ vi.mock("../plugins/launchers", () => ({
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+// Mock browser APIs
+(globalThis as any).requestAnimationFrame = (cb: () => void) => setTimeout(cb, 0);
+(globalThis as any).cancelAnimationFrame = (id: number) => clearTimeout(id);
+(globalThis as any).window = {
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+  setTimeout: globalThis.setTimeout,
+  clearTimeout: globalThis.clearTimeout,
+};
 
 function buildProject(overrides: Partial<Project> = {}): Project {
   return {
@@ -172,7 +197,7 @@ describe("ProjectDetail - Schedules Tab", () => {
   beforeEach(() => {
     queryClient = new QueryClient({
       defaultOptions: {
-        queries: { retry: false },
+        queries: { retry: false, staleTime: 0 },
         mutations: { retry: false },
       },
     });
@@ -181,7 +206,8 @@ describe("ProjectDetail - Schedules Tab", () => {
   });
 
   it("renders schedules tab", async () => {
-    (projectsApi.get as Mock).mockResolvedValue(buildProject());
+    const mockProject = buildProject();
+    (projectsApi.get as Mock).mockResolvedValue(mockProject);
     (projectsApi.listSchedules as Mock).mockResolvedValue([]);
     (issuesApi.list as Mock).mockResolvedValue([]);
     (agentsApi.list as Mock).mockResolvedValue([]);
@@ -201,7 +227,7 @@ describe("ProjectDetail - Schedules Tab", () => {
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={["/projects/project-1/schedules"]}>
             <Routes>
-              <Route path="/projects/:projectRef/*" element={<ProjectDetail />} />
+              <Route path="/projects/:projectId/*" element={<ProjectDetail />} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>
@@ -225,7 +251,8 @@ describe("ProjectDetail - Schedules Tab", () => {
   });
 
   it("loads schedules when schedules tab is active", async () => {
-    (projectsApi.get as Mock).mockResolvedValue(buildProject());
+    const mockProject = buildProject();
+    (projectsApi.get as Mock).mockResolvedValue(mockProject);
     (issuesApi.list as Mock).mockResolvedValue([]);
     (agentsApi.list as Mock).mockResolvedValue([]);
     (budgetsApi.overview as Mock).mockResolvedValue({
@@ -256,7 +283,7 @@ describe("ProjectDetail - Schedules Tab", () => {
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={["/projects/project-1/schedules"]}>
             <Routes>
-              <Route path="/projects/:projectRef/*" element={<ProjectDetail />} />
+              <Route path="/projects/:projectId/*" element={<ProjectDetail />} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>
@@ -272,7 +299,8 @@ describe("ProjectDetail - Schedules Tab", () => {
   });
 
   it("filters out template issues from issues tab", async () => {
-    (projectsApi.get as Mock).mockResolvedValue(buildProject());
+    const mockProject = buildProject();
+    (projectsApi.get as Mock).mockResolvedValue(mockProject);
     (projectsApi.listSchedules as Mock).mockResolvedValue([]);
     (agentsApi.list as Mock).mockResolvedValue([]);
     (budgetsApi.overview as Mock).mockResolvedValue({
@@ -299,7 +327,7 @@ describe("ProjectDetail - Schedules Tab", () => {
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={["/projects/project-1/issues"]}>
             <Routes>
-              <Route path="/projects/:projectRef/*" element={<ProjectDetail />} />
+              <Route path="/projects/:projectId/*" element={<ProjectDetail />} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>
