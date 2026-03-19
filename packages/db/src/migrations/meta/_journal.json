@@ -211,6 +211,13 @@
       "when": 1741980000000,
       "tag": "0038_nasty_rogue",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1773871200000,
+      "tag": "0039_scheduled_issue_templates",
+      "breakpoints": true
     }
   ]
 }
