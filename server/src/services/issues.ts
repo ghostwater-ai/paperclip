@@ -26,6 +26,7 @@ import {
   gateProjectExecutionWorkspacePolicy,
   parseProjectExecutionWorkspacePolicy,
 } from "./execution-workspace-policy.js";
+import { nextCronTick, parseCron, validateCron } from "./cron.js";
 import { instanceSettingsService } from "./instance-settings.js";
 import { redactCurrentUserText } from "../log-redaction.js";
 import { resolveIssueGoalId, resolveNextIssueGoalId } from "./issue-goal-fallback.js";
@@ -106,9 +107,164 @@ function sameRunLock(checkoutRunId: string | null, actorRunId: string | null) {
 }
 
 const TERMINAL_HEARTBEAT_RUN_STATUSES = new Set(["succeeded", "failed", "cancelled", "timed_out"]);
+const MAX_CRON_SEARCH_MINUTES = 4 * 366 * 24 * 60;
+const WEEKDAY_TO_INDEX: Record<string, number> = {
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+};
 
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
+}
+
+function isValidTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parseOneShotSchedule(value: string): Date | null {
+  const trimmed = value.trim();
+  if (!trimmed || !/[Tt]/.test(trimmed)) return null;
+  if (!(/[zZ]$/.test(trimmed) || /[+-]\d{2}:\d{2}$/.test(trimmed))) return null;
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function normalizeScheduleValue(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function timeZoneParts(instant: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+    weekday: "short",
+  }).formatToParts(instant);
+  const byType = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  const weekday = byType("weekday").slice(0, 3).toLowerCase();
+  return {
+    month: Number(byType("month")),
+    day: Number(byType("day")),
+    hour: Number(byType("hour")),
+    minute: Number(byType("minute")),
+    weekday: WEEKDAY_TO_INDEX[weekday] ?? -1,
+  };
+}
+
+export function nextCronTickForTimeZone(expression: string, after: Date, timeZone: string): Date | null {
+  const parsed = parseCron(expression);
+  if (timeZone === "UTC") {
+    return nextCronTick(parsed, after);
+  }
+
+  const cursor = new Date(after.getTime());
+  cursor.setUTCSeconds(0, 0);
+  cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
+
+  for (let i = 0; i < MAX_CRON_SEARCH_MINUTES; i += 1) {
+    const local = timeZoneParts(cursor, timeZone);
+    if (
+      parsed.months.includes(local.month) &&
+      parsed.daysOfMonth.includes(local.day) &&
+      parsed.daysOfWeek.includes(local.weekday) &&
+      parsed.hours.includes(local.hour) &&
+      parsed.minutes.includes(local.minute)
+    ) {
+      return new Date(cursor.getTime());
+    }
+    cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
+  }
+
+  return null;
+}
+
+export function resolveIssueScheduleFields(input: {
+  existing?: {
+    schedule: string | null;
+    scheduleTimezone: string | null;
+    scheduleEnabled: boolean;
+    isTemplate: boolean;
+  } | null;
+  patch: {
+    schedule?: string | null;
+    scheduleTimezone?: string | null;
+    scheduleEnabled?: boolean;
+    isTemplate?: boolean;
+  };
+  now?: Date;
+}) {
+  const now = input.now ?? new Date();
+  const existing = input.existing ?? null;
+  const nextScheduleRaw = normalizeScheduleValue(input.patch.schedule);
+  const scheduleExplicitlyCleared = input.patch.schedule !== undefined && nextScheduleRaw === null;
+  const schedule = nextScheduleRaw !== undefined ? nextScheduleRaw : (existing?.schedule ?? null);
+  const timezoneRaw = input.patch.scheduleTimezone !== undefined
+    ? input.patch.scheduleTimezone
+    : existing?.scheduleTimezone;
+  const scheduleTimezone = timezoneRaw && timezoneRaw.trim().length > 0 ? timezoneRaw.trim() : "UTC";
+  const requestedEnabled = input.patch.scheduleEnabled ?? existing?.scheduleEnabled ?? true;
+
+  if (!isValidTimeZone(scheduleTimezone)) {
+    throw unprocessable("scheduleTimezone must be a valid IANA timezone");
+  }
+
+  if (!schedule) {
+    return {
+      schedule: null,
+      scheduleTimezone: null,
+      scheduleNextRunAt: null,
+      scheduleEnabled: scheduleExplicitlyCleared ? false : requestedEnabled,
+      isTemplate: false,
+    };
+  }
+
+  const oneShot = parseOneShotSchedule(schedule);
+  if (oneShot) {
+    const scheduleEnabled = requestedEnabled && oneShot.getTime() > now.getTime();
+    return {
+      schedule,
+      scheduleTimezone,
+      scheduleNextRunAt: scheduleEnabled ? oneShot : null,
+      scheduleEnabled,
+      isTemplate: true,
+    };
+  }
+
+  const cronValidation = validateCron(schedule);
+  if (cronValidation) {
+    throw unprocessable(`schedule must be a valid cron expression or ISO-8601 timestamp (${cronValidation})`);
+  }
+
+  const scheduleEnabled = requestedEnabled;
+  const scheduleNextRunAt = scheduleEnabled
+    ? nextCronTickForTimeZone(schedule, now, scheduleTimezone)
+    : null;
+  if (scheduleEnabled && !scheduleNextRunAt) {
+    throw unprocessable("Unable to compute next run for schedule");
+  }
+
+  return {
+    schedule,
+    scheduleTimezone,
+    scheduleNextRunAt,
+    scheduleEnabled,
+    isTemplate: true,
+  };
 }
 
 function touchedByUserCondition(companyId: string, userId: string) {
@@ -684,11 +840,40 @@ export function issueService(db: Db) {
       return enriched;
     },
 
+    listSchedulesForProject: async (projectId: string, companyId: string) => {
+      const rows = await db
+        .select()
+        .from(issues)
+        .where(
+          and(
+            eq(issues.companyId, companyId),
+            eq(issues.projectId, projectId),
+            eq(issues.isTemplate, true),
+            isNull(issues.hiddenAt),
+          ),
+        )
+        .orderBy(asc(issues.title), asc(issues.id));
+      return withIssueLabels(db, rows);
+    },
+
     create: async (
       companyId: string,
       data: Omit<typeof issues.$inferInsert, "companyId"> & { labelIds?: string[] },
     ) => {
       const { labelIds: inputLabelIds, ...issueData } = data;
+      const scheduleFields = resolveIssueScheduleFields({
+        patch: {
+          schedule: issueData.schedule,
+          scheduleTimezone: issueData.scheduleTimezone,
+          scheduleEnabled: issueData.scheduleEnabled,
+          isTemplate: issueData.isTemplate,
+        },
+      });
+      issueData.schedule = scheduleFields.schedule;
+      issueData.scheduleTimezone = scheduleFields.scheduleTimezone;
+      issueData.scheduleNextRunAt = scheduleFields.scheduleNextRunAt;
+      issueData.scheduleEnabled = scheduleFields.scheduleEnabled;
+      issueData.isTemplate = scheduleFields.isTemplate;
       const isolatedWorkspacesEnabled = (await instanceSettings.getExperimental()).enableIsolatedWorkspaces;
       if (!isolatedWorkspacesEnabled) {
         delete issueData.executionWorkspaceId;
@@ -802,6 +987,25 @@ export function issueService(db: Db) {
       if (!existing) return null;
 
       const { labelIds: nextLabelIds, ...issueData } = data;
+      const scheduleFields = resolveIssueScheduleFields({
+        existing: {
+          schedule: existing.schedule,
+          scheduleTimezone: existing.scheduleTimezone,
+          scheduleEnabled: existing.scheduleEnabled,
+          isTemplate: existing.isTemplate,
+        },
+        patch: {
+          schedule: issueData.schedule,
+          scheduleTimezone: issueData.scheduleTimezone,
+          scheduleEnabled: issueData.scheduleEnabled,
+          isTemplate: issueData.isTemplate,
+        },
+      });
+      issueData.schedule = scheduleFields.schedule;
+      issueData.scheduleTimezone = scheduleFields.scheduleTimezone;
+      issueData.scheduleNextRunAt = scheduleFields.scheduleNextRunAt;
+      issueData.scheduleEnabled = scheduleFields.scheduleEnabled;
+      issueData.isTemplate = scheduleFields.isTemplate;
       const isolatedWorkspacesEnabled = (await instanceSettings.getExperimental()).enableIsolatedWorkspaces;
       if (!isolatedWorkspacesEnabled) {
         delete issueData.executionWorkspaceId;
