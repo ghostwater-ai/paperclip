@@ -1,6 +1,6 @@
-import { and, asc, eq, lte } from "drizzle-orm";
+import { and, asc, eq, lte, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { issues } from "@paperclipai/db";
+import { companies, issues } from "@paperclipai/db";
 import { logger } from "../middleware/logger.js";
 import { nextCronTickForTimeZone } from "./issues.js";
 import { validateCron } from "./cron.js";
@@ -72,6 +72,16 @@ export async function tickScheduledTasks(
 
   for (const template of dueTemplates) {
     const run = await db.transaction(async (tx) => {
+      // Allocate issue number from company counter
+      const [company] = await tx
+        .update(companies)
+        .set({ issueCounter: sql`${companies.issueCounter} + 1` })
+        .where(eq(companies.id, template.companyId))
+        .returning({ issueCounter: companies.issueCounter, issuePrefix: companies.issuePrefix });
+
+      const issueNumber = company.issueCounter;
+      const identifier = `${company.issuePrefix}-${issueNumber}`;
+
       const created = await tx
         .insert(issues)
         .values({
@@ -83,6 +93,8 @@ export async function tickScheduledTasks(
           priority: template.priority,
           status: "todo",
           isTemplate: false,
+          issueNumber,
+          identifier,
           schedule: null,
           scheduleTimezone: null,
           scheduleNextRunAt: null,

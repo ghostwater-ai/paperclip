@@ -17,24 +17,40 @@ function createHarness(dueTemplates: DueTemplate[]) {
   const insertedRows: Array<Record<string, unknown>> = [];
   const templateUpdates: Array<Record<string, unknown>> = [];
 
+  let companyCounter = 100;
+
   const tx = {
     insert: vi.fn(() => ({
       values: (values: Record<string, unknown>) => {
         insertedRows.push(values);
         return {
-          returning: async () => [
-            {
-              id: `issue-instance-${insertedRows.length}`,
-              assigneeAgentId: values.assigneeAgentId ?? null,
-            },
-          ],
+          returning: (selector?: unknown) => ({
+            then: async (fn: (rows: unknown[]) => unknown) =>
+              fn([
+                {
+                  id: `issue-instance-${insertedRows.length}`,
+                  assigneeAgentId: values.assigneeAgentId ?? null,
+                },
+              ]),
+          }),
         };
       },
     })),
     update: vi.fn(() => ({
       set: (values: Record<string, unknown>) => ({
-        where: async () => {
+        where: (condition: unknown) => {
+          // If this is the companies counter update (has issueCounter), return with returning()
+          if ("issueCounter" in (values as any)) {
+            companyCounter += 1;
+            return {
+              returning: async () => [
+                { issueCounter: companyCounter, issuePrefix: "ABI" },
+              ],
+            };
+          }
+          // Otherwise it's a template update
           templateUpdates.push(values);
+          return Promise.resolve();
         },
       }),
     })),
@@ -100,6 +116,8 @@ describe("tickScheduledTasks", () => {
         priority: "high",
         isTemplate: false,
         status: "todo",
+        issueNumber: 101,
+        identifier: "ABI-101",
         schedule: null,
         scheduleTimezone: null,
         scheduleNextRunAt: null,
