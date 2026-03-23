@@ -11,7 +11,6 @@ import {
   uniqueIndex,
   boolean,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 import { agents } from "./agents.js";
 import { projects } from "./projects.js";
 import { goals } from "./goals.js";
