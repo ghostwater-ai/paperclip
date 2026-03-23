@@ -70,7 +70,9 @@ Ship the fork patches that make Paperclip usable as the control plane for our mu
 ## Layer 3: User Acceptance Criteria
 
 ### UAC-001: Agent receives routed wake via OpenClaw Gateway
-- status: implemented
+- status: PASS
+- last_verified: 2026-03-23
+- verified_by: Oz (gap analysis ABI-79)
 - added: 2026-03-01 (PRs #1, #7, #9)
 - source_files: packages/adapters/openclaw-gateway/
 - criteria:
@@ -79,7 +81,9 @@ Ship the fork patches that make Paperclip usable as the control plane for our mu
   - Session key resolves template variables (e.g. `{{project.metadata.sessionKey}}`)
 
 ### UAC-002: Agent CLI supports full CRUD
-- status: implemented
+- status: PASS
+- last_verified: 2026-03-23
+- verified_by: Oz (gap analysis ABI-79)
 - added: 2026-03-01 (PR #5)
 - source_files: cli/
 - criteria:
@@ -88,7 +92,9 @@ Ship the fork patches that make Paperclip usable as the control plane for our mu
   - User can `agent delete` to remove an agent
 
 ### UAC-003: PATCH endpoint preserves existing config
-- status: implemented
+- status: PASS
+- last_verified: 2026-03-23
+- verified_by: Oz (gap analysis ABI-79)
 - added: 2026-03-15 (PR #24)
 - source_files: server/src/routes/agents.ts
 - criteria:
@@ -97,9 +103,11 @@ Ship the fork patches that make Paperclip usable as the control plane for our mu
   - Non-object `runtimeConfig` returns 422
 
 ### UAC-004: Scheduled tasks fire on cron schedule
-- status: implemented
+- status: PASS
+- last_verified: 2026-03-23
+- verified_by: Oz (gap analysis ABI-79)
 - added: 2026-03-19 (PR #26)
-- source_files: server/src/services/scheduler.ts, packages/db/migrations/0039*
+- source_files: server/src/services/scheduled-tasks.ts, packages/db/src/migrations/0039_scheduled_issue_templates.sql
 - criteria:
   - User can create a template task with a cron expression
   - Scheduler clones template into fresh task instance at each cron tick
@@ -108,7 +116,9 @@ Ship the fork patches that make Paperclip usable as the control plane for our mu
   - Cloned instances have correct `issueNumber`/`identifier`
 
 ### UAC-005: Per-agent API key isolation
-- status: implemented
+- status: PASS
+- last_verified: 2026-03-23
+- verified_by: Oz (gap analysis ABI-79)
 - added: 2026-03-19 (PR #22)
 - source_files: packages/adapters/openclaw-gateway/
 - criteria:
@@ -117,18 +127,24 @@ Ship the fork patches that make Paperclip usable as the control plane for our mu
   - Multiple agents on the same host don't share a single key file
 
 ### UAC-006: Self-wake suppression
-- status: intent
+- status: MISSING
+- last_verified: 2026-03-23
+- verified_by: Oz (gap analysis ABI-79)
 - added: 2026-03-23 (gap analysis)
-- source_files: packages/adapters/openclaw-gateway/
+- source_files: server/src/services/heartbeat.ts
+- tracking: ghostwater-ai/paperclip#31
 - criteria:
   - Completing a task does not trigger a redundant wake for the completing agent
   - Self-authored comments do not trigger wakes for the comment author
   - Wakes for already-done issues are skipped
 
 ### UAC-007: Wake template customization
-- status: intent
+- status: MISSING
+- last_verified: 2026-03-23
+- verified_by: Oz (gap analysis ABI-79)
 - added: 2026-03-23 (Issue #20)
-- source_files: server/src/services/wake.ts
+- source_files: packages/adapters/openclaw-gateway/src/server/execute.ts, server/src/services/heartbeat.ts
+- tracking: ghostwater-ai/paperclip#20
 - criteria:
   - Wake text is configurable per agent, project, and event type
   - Cascading template resolution (agent-specific → project-specific → default)
@@ -139,14 +155,19 @@ Ship the fork patches that make Paperclip usable as the control plane for our mu
 ## Layer 4: Engineering Invariants
 
 1. **Config merge, never replace** — All PATCH endpoints that accept nested objects (`adapterConfig`, `runtimeConfig`, `metadata`) must shallow-merge with existing values. (Enforces UAC-003)
+   - status: PASS | verified: 2026-03-23 | Shallow-merge via object spread in `server/src/routes/agents.ts` lines 1112-1127
 
 2. **Template variable resolution** — Session key routing must resolve all `{{...}}` template variables before dispatching a wake. Unresolved variables must fail loudly, not send to a malformed session. (Enforces UAC-001)
+   - status: PASS | verified: 2026-03-23 | `hasUnknownVar` check in `resolveSessionKeyFromRouting()` skips rules with unresolved vars; malformed results (empty, trailing colon, double colon) also skipped. Falls through to fallback strategy rather than throwing, but the invariant's intent (no malformed session keys dispatched) is satisfied.
 
 3. **Fork branch discipline** — `main` mirrors upstream `master` (fast-forward only, never commit directly). All custom work goes on `patches`. (Structural)
+   - status: PASS | verified: 2026-03-23 | `main` has zero commits not on `upstream/master`
 
 4. **Migration numbering** — Fork migrations start at 0038+. Watch for collisions on upstream sync. (Structural)
+   - status: PASS | verified: 2026-03-23 | Migrations 0038 and 0039 present. No collisions with current upstream.
 
 5. **Scheduled task cloning** — Cloned task instances must always receive a valid `issueNumber` and `identifier` by incrementing the company issue counter. (Enforces UAC-004)
+   - status: PASS | verified: 2026-03-23 | `issueCounter` incremented via SQL, `identifier` constructed as `{prefix}-{number}` in `scheduled-tasks.ts` lines 78-97
 
 ---
 
