@@ -27,11 +27,11 @@ function collectRoutePaths(node: unknown, paths: string[] = []): string[] {
 }
 
 describe("App routes", () => {
-  it("includes project schedules under board and unprefixed routes", () => {
+  it("does not include legacy project schedules routes", () => {
     const paths = collectRoutePaths(App());
     const schedulesPaths = paths.filter((path) => path === "projects/:projectId/schedules");
 
-    expect(schedulesPaths.length).toBeGreaterThanOrEqual(2);
+    expect(schedulesPaths.length).toBe(0);
   });
 
   it("includes unprefixed redirects for project budget routes", () => {

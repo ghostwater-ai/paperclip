@@ -10,15 +10,10 @@ const mockProjectService = vi.hoisted(() => ({
   resolveByReference: vi.fn(),
 }));
 
-const mockIssueService = vi.hoisted(() => ({
-  listSchedulesForProject: vi.fn(),
-}));
-
 const mockLogActivity = vi.hoisted(() => vi.fn());
 
 vi.mock("../services/index.js", () => ({
   projectService: () => mockProjectService,
-  issueService: () => mockIssueService,
   logActivity: mockLogActivity,
 }));
 
@@ -51,6 +46,5 @@ describe("project schedules migration", () => {
     const res = await request(createApp()).get("/api/projects/project-1/schedules");
 
     expect(res.status).toBe(404);
-    expect(mockIssueService.listSchedulesForProject).not.toHaveBeenCalled();
   });
 });

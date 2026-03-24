@@ -121,11 +121,6 @@ export interface Issue {
   originRunId?: string | null;
   requestDepth: number;
   billingCode: string | null;
-  schedule: string | null;
-  scheduleTimezone: string | null;
-  scheduleNextRunAt: Date | null;
-  scheduleEnabled: boolean;
-  isTemplate: boolean;
   assigneeAdapterOverrides: IssueAssigneeAdapterOverrides | null;
   executionWorkspaceId: string | null;
   executionWorkspacePreference: string | null;

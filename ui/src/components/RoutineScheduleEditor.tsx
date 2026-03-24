@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ChevronRight } from "lucide-react";
 
 type SchedulePreset = "every_minute" | "every_hour" | "every_day" | "weekdays" | "weekly" | "monthly" | "custom";
 
@@ -61,32 +60,21 @@ function parseCronToPreset(cron: string): {
 
   const [min, hr, dom, , dow] = parts;
 
-  // Every minute: "* * * * *"
   if (min === "*" && hr === "*" && dom === "*" && dow === "*") {
     return { preset: "every_minute", ...defaults };
   }
-
-  // Every hour: "0 * * * *"
   if (hr === "*" && dom === "*" && dow === "*") {
     return { preset: "every_hour", ...defaults, minute: min === "*" ? "0" : min };
   }
-
-  // Every day: "M H * * *"
   if (dom === "*" && dow === "*" && hr !== "*") {
     return { preset: "every_day", ...defaults, hour: hr, minute: min === "*" ? "0" : min };
   }
-
-  // Weekdays: "M H * * 1-5"
   if (dom === "*" && dow === "1-5" && hr !== "*") {
     return { preset: "weekdays", ...defaults, hour: hr, minute: min === "*" ? "0" : min };
   }
-
-  // Weekly: "M H * * D" (single day)
   if (dom === "*" && /^\d$/.test(dow) && hr !== "*") {
     return { preset: "weekly", ...defaults, hour: hr, minute: min === "*" ? "0" : min, dayOfWeek: dow };
   }
-
-  // Monthly: "M H D * *"
   if (/^\d{1,2}$/.test(dom) && dow === "*" && hr !== "*") {
     return { preset: "monthly", ...defaults, hour: hr, minute: min === "*" ? "0" : min, dayOfMonth: dom };
   }
@@ -113,7 +101,13 @@ function buildCron(preset: SchedulePreset, hour: string, minute: string, dayOfWe
   }
 }
 
-function describeSchedule(cron: string): string {
+function ordinalSuffix(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
+}
+
+export function describeSchedule(cron: string): string {
   const { preset, hour, minute, dayOfWeek, dayOfMonth } = parseCronToPreset(cron);
   const hourLabel = HOURS.find((h) => h.value === hour)?.label ?? `${hour}`;
   const timeStr = `${hourLabel.replace(/ (AM|PM)$/, "")}:${minute.padStart(2, "0")} ${hourLabel.match(/(AM|PM)$/)?.[0] ?? ""}`;
@@ -138,15 +132,7 @@ function describeSchedule(cron: string): string {
   }
 }
 
-function ordinalSuffix(n: number): string {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return s[(v - 20) % 10] || s[v] || s[0];
-}
-
-export { describeSchedule };
-
-export function ScheduleEditor({
+export function RoutineScheduleEditor({
   value,
   onChange,
 }: {
@@ -161,7 +147,6 @@ export function ScheduleEditor({
   const [dayOfMonth, setDayOfMonth] = useState(parsed.dayOfMonth);
   const [customCron, setCustomCron] = useState(preset === "custom" ? value : "");
 
-  // Sync from external value changes
   useEffect(() => {
     const p = parseCronToPreset(value);
     setPreset(p.preset);

@@ -20,7 +20,6 @@ import { BudgetPolicyCard } from "../components/BudgetPolicyCard";
 import { IssuesList } from "../components/IssuesList";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { PageTabBar } from "../components/PageTabBar";
-import { SchedulesList } from "../components/SchedulesList";
 import { projectRouteRef, cn } from "../lib/utils";
 import { Tabs } from "@/components/ui/tabs";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
@@ -28,7 +27,7 @@ import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slo
 
 /* ── Top-level tab types ── */
 
-type ProjectBaseTab = "overview" | "list" | "configuration" | "budget" | "schedules";
+type ProjectBaseTab = "overview" | "list" | "configuration" | "budget";
 type ProjectPluginTab = `plugin:${string}`;
 type ProjectTab = ProjectBaseTab | ProjectPluginTab;
 
@@ -45,7 +44,6 @@ function resolveProjectTab(pathname: string, projectId: string): ProjectTab | nu
   if (tab === "configuration") return "configuration";
   if (tab === "budget") return "budget";
   if (tab === "issues") return "list";
-  if (tab === "schedules") return "schedules";
   return null;
 }
 
@@ -188,14 +186,9 @@ function ProjectIssuesList({ projectId, companyId }: { projectId: string; compan
     },
   });
 
-  // Filter out template issues (isTemplate=true) from the main Issues tab
-  const nonTemplateIssues = useMemo(() => {
-    return (issues ?? []).filter(issue => !issue.isTemplate);
-  }, [issues]);
-
   return (
     <IssuesList
-      issues={nonTemplateIssues}
+      issues={issues ?? []}
       isLoading={isLoading}
       error={error as Error | null}
       agents={agents}
@@ -203,45 +196,6 @@ function ProjectIssuesList({ projectId, companyId }: { projectId: string; compan
       projectId={projectId}
       viewStateKey={`paperclip:project-view:${projectId}`}
       onUpdateIssue={(id, data) => updateIssue.mutate({ id, data })}
-    />
-  );
-}
-
-/* ── Schedules tab content ── */
-
-function ProjectSchedulesList({ projectId, companyId }: { projectId: string; companyId: string }) {
-  const queryClient = useQueryClient();
-
-  const { data: agents } = useQuery({
-    queryKey: queryKeys.agents.list(companyId),
-    queryFn: () => agentsApi.list(companyId),
-    enabled: !!companyId,
-  });
-
-  const { data: schedules, isLoading, error } = useQuery({
-    queryKey: ['projects', projectId, 'schedules'],
-    queryFn: () => projectsApi.listSchedules(projectId, companyId),
-    enabled: !!companyId && !!projectId,
-  });
-
-  const updateIssue = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
-      issuesApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'schedules'] });
-      queryClient.invalidateQueries({ queryKey: queryKeys.issues.listByProject(companyId, projectId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(companyId) });
-    },
-  });
-
-  return (
-    <SchedulesList
-      schedules={schedules ?? []}
-      isLoading={isLoading}
-      error={error as Error | null}
-      projectId={projectId}
-      companyId={companyId}
-      agents={agents}
     />
   );
 }
@@ -541,8 +495,6 @@ export function ProjectDetail() {
       navigate(`/projects/${canonicalProjectRef}/budget`);
     } else if (tab === "configuration") {
       navigate(`/projects/${canonicalProjectRef}/configuration`);
-    } else if (tab === "schedules") {
-      navigate(`/projects/${canonicalProjectRef}/schedules`);
     } else {
       navigate(`/projects/${canonicalProjectRef}/issues`);
     }
@@ -608,7 +560,6 @@ export function ProjectDetail() {
         <PageTabBar
           items={[
             { value: "list", label: "Issues" },
-            { value: "schedules", label: "Schedules" },
             { value: "overview", label: "Overview" },
             { value: "configuration", label: "Configuration" },
             { value: "budget", label: "Budget" },
@@ -636,10 +587,6 @@ export function ProjectDetail() {
 
       {activeTab === "list" && project?.id && resolvedCompanyId && (
         <ProjectIssuesList projectId={project.id} companyId={resolvedCompanyId} />
-      )}
-
-      {activeTab === "schedules" && project?.id && resolvedCompanyId && (
-        <ProjectSchedulesList projectId={project.id} companyId={resolvedCompanyId} />
       )}
 
       {activeTab === "configuration" && (

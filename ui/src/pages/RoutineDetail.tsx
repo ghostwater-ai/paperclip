@@ -31,7 +31,7 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import { AgentIcon } from "../components/AgentIconPicker";
 import { InlineEntitySelector, type InlineEntityOption } from "../components/InlineEntitySelector";
 import { MarkdownEditor, type MarkdownEditorRef } from "../components/MarkdownEditor";
-import { ScheduleEditor, describeSchedule } from "../components/ScheduleEditor";
+import { RoutineScheduleEditor, describeSchedule } from "../components/RoutineScheduleEditor";
 import { RunButton } from "../components/AgentActionButtons";
 import { getRecentAssigneeIds, sortAgentsByRecency, trackRecentAssignee } from "../lib/recent-assignees";
 import { Button } from "@/components/ui/button";
@@ -166,7 +166,7 @@ function TriggerEditor({
         {trigger.kind === "schedule" && (
           <div className="md:col-span-2 space-y-1.5">
             <Label className="text-xs">Schedule</Label>
-            <ScheduleEditor
+            <RoutineScheduleEditor
               value={draft.cronExpression}
               onChange={(cronExpression) => setDraft((current) => ({ ...current, cronExpression }))}
             />
@@ -902,7 +902,7 @@ export function RoutineDetail() {
               {newTrigger.kind === "schedule" && (
                 <div className="md:col-span-2 space-y-1.5">
                   <Label className="text-xs">Schedule</Label>
-                  <ScheduleEditor
+                  <RoutineScheduleEditor
                     value={newTrigger.cronExpression}
                     onChange={(cronExpression) => setNewTrigger((current) => ({ ...current, cronExpression }))}
                   />
