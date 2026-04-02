@@ -7,7 +7,12 @@ import { asNumber, asString, buildPaperclipEnv, parseObject } from "@paperclipai
 import crypto, { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
 
-type SessionKeyStrategy = "fixed" | "issue" | "run";
+type SessionKeyStrategy = "fixed" | "issue" | "run" | "routing";
+
+type SessionKeyRoutingRule = {
+  pattern: string;
+  sessionKey: string;
+};
 
 type WakePayload = {
   runId: string;
@@ -122,12 +127,25 @@ function parseBoolean(value: unknown, fallback = false): boolean {
 
 function normalizeSessionKeyStrategy(value: unknown): SessionKeyStrategy {
   const normalized = asString(value, "issue").trim().toLowerCase();
-  if (normalized === "fixed" || normalized === "run") return normalized;
+  if (normalized === "fixed" || normalized === "run" || normalized === "routing") return normalized;
   return "issue";
 }
 
+function parseSessionKeyRouting(value: unknown): SessionKeyRoutingRule[] {
+  if (!Array.isArray(value)) return [];
+  const rules: SessionKeyRoutingRule[] = [];
+  for (const entry of value) {
+    const rule = asRecord(entry);
+    const pattern = nonEmpty(rule?.pattern);
+    const sessionKey = nonEmpty(rule?.sessionKey);
+    if (!pattern || !sessionKey) continue;
+    rules.push({ pattern, sessionKey });
+  }
+  return rules;
+}
+
 function resolveSessionKey(input: {
-  strategy: SessionKeyStrategy;
+  strategy: Exclude<SessionKeyStrategy, "routing">;
   configuredSessionKey: string | null;
   runId: string;
   issueId: string | null;
@@ -136,6 +154,70 @@ function resolveSessionKey(input: {
   if (input.strategy === "run") return `paperclip:run:${input.runId}`;
   if (input.strategy === "issue" && input.issueId) return `paperclip:issue:${input.issueId}`;
   return fallback;
+}
+
+function patternToRegExp(pattern: string): RegExp {
+  const escaped = pattern
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\\\*/g, ".*")
+    .replace(/\\\?/g, ".");
+  return new RegExp(`^${escaped}$`);
+}
+
+export function matchPattern(pattern: string, value: string): boolean {
+  const normalizedPattern = pattern.trim();
+  if (!normalizedPattern) return false;
+  return patternToRegExp(normalizedPattern).test(value);
+}
+
+export function interpolateTemplate(
+  template: string,
+  variables: Record<string, string | null | undefined>,
+): string {
+  const replace = (key: string) => {
+    const value = variables[key];
+    return value == null ? "" : value;
+  };
+  return template
+    .replace(/{{\s*([a-zA-Z0-9_]+)\s*}}/g, (_match, key) => replace(key))
+    .replace(/\$\{([a-zA-Z0-9_]+)\}/g, (_match, key) => replace(key));
+}
+
+export function resolveSessionKeyFromRouting(input: {
+  routingRules: SessionKeyRoutingRule[];
+  wakeSource: string | null;
+  wakeReason: string | null;
+  runId: string;
+  issueId: string | null;
+  paperclipAgentId: string;
+  adapterAgentId: string | null;
+  fallback: {
+    strategy: SessionKeyStrategy;
+    configuredSessionKey: string | null;
+  };
+}): string {
+  const wakeSource = input.wakeSource ?? "";
+  const wakeReason = input.wakeReason ?? "";
+  const key = `${wakeSource}:${wakeReason}`;
+  for (const rule of input.routingRules) {
+    if (!matchPattern(rule.pattern, key)) continue;
+    return interpolateTemplate(rule.sessionKey, {
+      paperclipAgentId: input.paperclipAgentId,
+      adapterAgentId: input.adapterAgentId,
+      issueId: input.issueId,
+      runId: input.runId,
+      wakeSource: input.wakeSource,
+      wakeReason: input.wakeReason,
+    });
+  }
+
+  const fallbackStrategy = input.fallback.strategy === "routing" ? "issue" : input.fallback.strategy;
+  return resolveSessionKey({
+    strategy: fallbackStrategy,
+    configuredSessionKey: input.fallback.configuredSessionKey,
+    runId: input.runId,
+    issueId: input.issueId,
+  });
 }
 
 function isLoopbackHost(hostname: string): boolean {
@@ -1057,12 +1139,31 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const sessionKeyStrategy = normalizeSessionKeyStrategy(ctx.config.sessionKeyStrategy);
   const configuredSessionKey = nonEmpty(ctx.config.sessionKey);
-  const sessionKey = resolveSessionKey({
-    strategy: sessionKeyStrategy,
-    configuredSessionKey,
-    runId: ctx.runId,
-    issueId: wakePayload.issueId,
-  });
+  const sessionKeyRouting = parseSessionKeyRouting(ctx.config.sessionKeyRouting);
+  const configuredAgentId = nonEmpty(ctx.config.agentId);
+  const templateAgentId = nonEmpty(payloadTemplate.agentId);
+  const adapterAgentId = configuredAgentId ?? templateAgentId;
+  const sessionKey =
+    sessionKeyStrategy === "routing"
+      ? resolveSessionKeyFromRouting({
+          routingRules: sessionKeyRouting,
+          wakeSource: nonEmpty(ctx.context.wakeSource),
+          wakeReason: wakePayload.wakeReason,
+          runId: ctx.runId,
+          issueId: wakePayload.issueId,
+          paperclipAgentId: ctx.agent.id,
+          adapterAgentId,
+          fallback: {
+            strategy: "issue",
+            configuredSessionKey,
+          },
+        })
+      : resolveSessionKey({
+          strategy: sessionKeyStrategy,
+          configuredSessionKey,
+          runId: ctx.runId,
+          issueId: wakePayload.issueId,
+        });
 
   const templateMessage = nonEmpty(payloadTemplate.message) ?? nonEmpty(payloadTemplate.text);
   const message = templateMessage ? appendWakeText(templateMessage, wakeText) : wakeText;
@@ -1076,7 +1177,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   };
   delete agentParams.text;
 
-  const configuredAgentId = nonEmpty(ctx.config.agentId);
   if (configuredAgentId && !nonEmpty(agentParams.agentId)) {
     agentParams.agentId = configuredAgentId;
   }
